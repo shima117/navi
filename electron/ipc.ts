@@ -62,7 +62,7 @@ export interface NaviSettings {
 }
 
 export const DEFAULT_SETTINGS: NaviSettings = {
-  userName: 'ユーザー',
+  userName: 'しま',
   speakerId: 8,
   resourceMode: 'BALANCED',
   quiet: false,
