@@ -4,6 +4,9 @@ import { FEATURES } from './features';
 import { SettingsStore } from './settings';
 import { WindowManager } from './windows';
 
+// Test isolation (e2e): a throwaway profile, set before anything reads userData.
+if (process.env.NAVI_USER_DATA) app.setPath('userData', process.env.NAVI_USER_DATA);
+
 app.whenReady().then(async () => {
   const settings = new SettingsStore();
   await settings.load();

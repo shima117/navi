@@ -1,3 +1,5 @@
+import { DEFAULT_MANAGED_PROCESSES, type ManagedProcessesSettings } from '../src/core/supervisor/processSpecs';
+
 /** IPC channel names (design doc §17). Shared by main and preload. */
 export const IPC = {
   captureListSources: 'capture:listSources',
@@ -47,6 +49,12 @@ export const IPC = {
   memoryDelete: 'memory:delete',
   memoryClear: 'memory:clear',
   memoryStats: 'memory:stats',
+  /** PR-10 Diagnostics tab: health, processes, latency, errors, resources. */
+  diagnosticsGet: 'diagnostics:get',
+  /** Restart one supervised helper process by id. */
+  diagnosticsRestartProcess: 'diagnostics:restartProcess',
+  /** Save a diagnostics JSON through a save dialog. */
+  diagnosticsExport: 'diagnostics:export',
 } as const;
 
 /** What memory:clear removes: session memories, long-term memories, or everything incl. logs. */
@@ -74,6 +82,12 @@ export interface NaviSettings {
   persistUtterances: boolean;
   /** Days to keep utterance / screen logs and unused session memories. */
   utteranceRetentionDays: number;
+  /** Pick the resource mode from the situation (game / share / idle); off = resourceMode. */
+  autoResourceMode: boolean;
+  /** Also append local metrics (numbers only, no text or images) to userData/logs. */
+  telemetryToFile: boolean;
+  /** Helper processes NAVI starts and supervises. All off by default. */
+  managedProcesses: ManagedProcessesSettings;
 }
 
 export const DEFAULT_SETTINGS: NaviSettings = {
@@ -88,6 +102,9 @@ export const DEFAULT_SETTINGS: NaviSettings = {
   micDeviceId: null,
   persistUtterances: false,
   utteranceRetentionDays: 30,
+  autoResourceMode: true,
+  telemetryToFile: false,
+  managedProcesses: DEFAULT_MANAGED_PROCESSES,
 };
 
 export type FriendPush =

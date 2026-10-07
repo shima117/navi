@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import type { FrameSummary } from '../screen/FrameSummary';
 import type { LipSyncKeyframe } from '../voice/LipSync';
+import type { ResourceMode } from '../resource/ResourceGovernor';
 
 /** Every event in the system (design doc §16). Modules talk only through these. */
 export interface NaviEvents {
@@ -34,9 +35,18 @@ export interface NaviEvents {
   'session.ended': { at: number };
 
   'health.changed': { service: ServiceName; ok: boolean };
+
+  // Local-only metrics (PR-10). Payloads never carry transcript text or images.
+  'metrics.timing': { kind: TimingKind; ms: number; at: number };
+  'metrics.error': { service: string; message: string; at: number };
+  'metrics.initiative': { speak: boolean; reason: string; at: number };
+  'resource.mode': { mode: ResourceMode; auto: boolean; reason: string; at: number };
 }
 
 export type ServiceName = 'chat' | 'vision' | 'stt' | 'tts' | 'avatar';
+
+/** response = user utterance → Navi speech start (§23.3); the others are per-call latencies. */
+export type TimingKind = 'response' | 'chat' | 'vision' | 'tts';
 
 type Handler<T> = (payload: T) => void;
 

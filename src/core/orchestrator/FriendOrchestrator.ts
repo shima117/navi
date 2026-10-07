@@ -15,6 +15,7 @@ import type { PluginHost } from '../plugins/PluginHost';
 import { detectScreenReference } from '../screen/ScreenReference';
 import type { VisionService } from '../screen/VisionService';
 import type { FrameSummary } from '../screen/FrameSummary';
+import { errorMessage } from '../telemetry/redact';
 import type { CompanionResponse, PluginContext, PluginEvent, ScreenObservation, UserUtterance } from '../types';
 
 export interface OrchestratorDeps {
@@ -120,6 +121,14 @@ export class FriendOrchestrator {
    * from recent events and lets the scheduler decide; usually that is silence.
    */
   async considerInitiative(): Promise<InitiativeDecision> {
+    const decision = await this.decideInitiative();
+    // "selected" but the model then chose silence is still a silent decision.
+    const reason = !decision.speak && decision.reason === 'selected' ? 'model_chose_silence' : decision.reason;
+    this.deps.bus.emit('metrics.initiative', { speak: decision.speak, reason, at: this.now() });
+    return decision;
+  }
+
+  private async decideInitiative(): Promise<InitiativeDecision> {
     const now = this.now();
     if (this.inflight) return { speak: false, score: 0, reason: 'busy' };
     if (!this.deps.isHealthy('chat')) return { speak: false, score: 0, reason: 'ai_offline' };
@@ -217,13 +226,16 @@ export class FriendOrchestrator {
     const { vision } = this.deps;
     if (!vision || !this.deps.isHealthy('vision') || !(this.deps.sharing?.() ?? true)) return null;
     try {
+      const startedAt = this.now();
       const obs = await vision.observe(kind, userText, { highPriority, now: this.now(), signal });
+      if (obs) this.deps.bus.emit('metrics.timing', { kind: 'vision', ms: this.now() - startedAt, at: this.now() });
       if (obs) this.deps.bus.emit('screen.observed', obs);
       return obs;
     } catch (err) {
       if (!signal.aborted) {
         console.error('[FriendOrchestrator] vision failed:', err);
         this.deps.reportFailure?.('vision');
+        this.deps.bus.emit('metrics.error', { service: 'vision', message: errorMessage(err), at: this.now() });
       }
       return null;
     }
@@ -263,6 +275,7 @@ export class FriendOrchestrator {
       if (signal.aborted || seq !== this.turnSeq) return { ...SILENT_RESPONSE };
       console.error('[FriendOrchestrator] chat failed:', err);
       this.deps.reportFailure?.('chat');
+      bus.emit('metrics.error', { service: 'chat', message: errorMessage(err), at: this.now() });
       bus.emit('friend.silent', { reason: 'ai_error' });
       return { ...SILENT_RESPONSE };
     } finally {
@@ -311,6 +324,7 @@ export class FriendOrchestrator {
 
   private async ask(input: TurnInput, signal: AbortSignal, extraInstruction?: string): Promise<CompanionResponse> {
     const { model, keepAlive } = this.deps.router.chatModel();
+    const startedAt = this.now();
     const raw = await this.deps.ollama.chat({
       model,
       keepAlive,
@@ -319,6 +333,7 @@ export class FriendOrchestrator {
       signal,
       messages: await this.buildMessages(input, extraInstruction),
     });
+    this.deps.bus.emit('metrics.timing', { kind: 'chat', ms: this.now() - startedAt, at: this.now() });
     return parseCompanionResponse(raw);
   }
 

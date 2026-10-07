@@ -1,3 +1,4 @@
+import type { DiagnosticsExportResult, DiagnosticsSnapshot } from '../src/core/telemetry/DiagnosticsReport';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC, type CaptureSource, type FriendPush, type NaviSettings, type VoiceServiceEvent } from './ipc';
 import type { MemoryClearScope } from './ipc';
@@ -68,6 +69,13 @@ const api = {
     delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC.memoryDelete, id),
     clear: (scope: MemoryClearScope): Promise<void> => ipcRenderer.invoke(IPC.memoryClear, scope),
     stats: (): Promise<MemoryStats> => ipcRenderer.invoke(IPC.memoryStats),
+  },
+  diagnostics: {
+    get: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke(IPC.diagnosticsGet),
+    /** Restart a supervised helper process; false if it is not configured. */
+    restartProcess: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.diagnosticsRestartProcess, id),
+    /** Opens a save dialog in main and writes the snapshot there. */
+    export: (): Promise<DiagnosticsExportResult> => ipcRenderer.invoke(IPC.diagnosticsExport),
   },
 };
 

@@ -15,12 +15,17 @@ export function SettingsTab() {
         リソースモード
         <select
           value={settings.resourceMode}
+          disabled={settings.autoResourceMode}
           onChange={(e) => void updateSettings({ resourceMode: e.target.value as NaviSettings['resourceMode'] })}
         >
           <option value="GAME_PRIORITY">GAME_PRIORITY (ゲーム優先)</option>
           <option value="BALANCED">BALANCED</option>
           <option value="DESKTOP_CHAT">DESKTOP_CHAT (高精度Vision)</option>
         </select>
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={settings.autoResourceMode} onChange={(e) => void updateSettings({ autoResourceMode: e.target.checked })} />
+        リソースモードを状況に合わせて自動で切り替える
       </label>
       <label className="field">
         VOICEVOX 話者ID

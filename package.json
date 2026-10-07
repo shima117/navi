@@ -13,7 +13,9 @@
     "start": "npm run build && electron .",
     "electron:dev": "npm run build:electron && electron . --dev",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "npm run build && tsc -p e2e/tsconfig.json && node e2e/run.cjs",
+    "eval:character": "tsc -p scripts/tsconfig.json && esbuild scripts/eval-character.ts --bundle --platform=node --format=cjs --outfile=dist-electron/scripts/eval-character.cjs --log-level=warning && node dist-electron/scripts/eval-character.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
