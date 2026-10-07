@@ -23,6 +23,11 @@ pip install -r requirements.txt
 python -m navi_voice.server          # ws://127.0.0.1:17650/ws
 #   VRAM が厳しい場合: $env:NAVI_STT_DEVICE="cpu"
 
+# 3.1 フルデュプレックス音声を使う場合
+# Voicemeeter Potatoで PC/Game=B2、Discord等の通話相手=B3、NAVI出力=VAIO3 を用意。
+# NAVIの Settings > 音声・Voicemeeter から現在設定を保存して適用する。
+# NAVIはVAIO3 Gainを変更しないため、右端フェーダーをNAVI専用音量として使えます。
+
 # 4. アプリ
 npm install
 npm start                            # build して起動
@@ -48,14 +53,14 @@ src/core/            Friend Core — ゲーム固有ロジックを置かない
   telemetry/         ローカル専用の指標 (応答遅延 p50/p95, 自発発言, エラー), JSONL ログ, 診断レポート — 外部送信なし
   screen/            dHash フレーム差分, 4x4 領域ハッシュ (変化した領域: 右下 等), 20 秒リングバッファ, 「これ/今の」検出, OCR 値札/セール解析, VisionService
   ai/                OllamaClient, ModelRouter, HealthMonitor (再接続 1,2,5,10,30 秒)
-  voice/             VOICEVOX クライアント, AudioQuery → 口パク, barge-in 状態機械
+  voice/             FloorManager, 相槌/割り込み/継続/エコー判定, VOICEVOX, AudioQuery → 口パク
   resource/          ResourceGovernor (GAME_PRIORITY / BALANCED / DESKTOP_CHAT)
   memory/            MemoryStore (SQLite + インメモリ退避), MemoryWriter, SessionSummarizer, 秘密情報の伏せ字化
   plugins/           GamePlugin IF (§15), PluginHost — プラグイン障害は Generic に退避
 src/avatar/          AvatarDirector — cue → 60fps パラメータ (表情/ジェスチャ/まばたき/呼吸/口パク/眼鏡追従)
 src/plugins/tarkov/  TarkovPlugin (骨組み; 既存資産の移植は PR-08)
 src/renderer/        FriendShell UI, 画面ストリーム, マイク → 音声サービス, 音声再生, アバター窓
-voice-service/       Python: WebRTC VAD + faster-whisper (localhost のみ bind)
+voice-service/       Python: USER/SYSTEM/REMOTE分離, WebRTC VAD + faster-whisper, Voicemeeter Remote (localhost のみ bind)
 ```
 
 データフロー:
@@ -97,5 +102,6 @@ e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物�
 | PR-08 | Tarkov Plugin | 🟡 IF とツール定義のみ。既存 Tarkov Assistant のドメイン/データ移植は未着手 |
 | PR-09 | Memory (SQLite) | ✅ `userData/navi.sqlite` (node:sqlite, FTS5 bigram 検索), セッション/長期の昇格, MemoryWriter, セッション要約, Memory タブ (検索・編集・削除・全消去)。発言ログは既定で保存しない (設定でオン, 保存期間つき)。開けない場合はインメモリに退避 |
 | PR-10 | Hardening | ✅ プロセス監視, 再接続, リソースモード自動切替 (+VRAM 表示), 診断タブ, ローカル専用テレメトリ, 受入テスト (B 沈黙 / C 割り込み / D キャラ評価 / G 障害 e2e) |
+| PR-11 | Full-Duplex Audio / Voicemeeter | 🟡 B2/B3/VAIO3分離, 差分復元, FloorManager, 双方向相槌/割り込み, SpeechChunk, EchoGuard, 音声設定UIまで実装。実マイク + Voicemeeter Potato + VAIO3での30分運用試験と、任意のVoicemod後段統合は未完了 |
 
 既存の Tarkov Assistant / PuppetJS のコードはこのリポジトリに含まれていないため、PR-07 / PR-08 はそれらを取り込んだ後に進めます。

@@ -3,10 +3,14 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import {
   IPC,
   type CaptureSource,
+  type AudioDevice,
+  type AudioRuntimeState,
   type FriendPush,
   type NaviSettings,
   type OcrSettingsPush,
+  type RoutingSnapshot,
   type VoiceServiceEvent,
+  type VoicePlaybackEvent,
 } from './ipc';
 import type { MemoryClearScope } from './ipc';
 import type { MemoryItem, MemoryStats, MemoryTier } from '../src/core/memory/MemoryStore';
@@ -49,7 +53,15 @@ const api = {
     stop: (): Promise<void> => ipcRenderer.invoke(IPC.voiceStop),
     setDevice: (deviceId: string | null): Promise<void> => ipcRenderer.invoke(IPC.voiceSetDevice, deviceId),
     sendEvent: (event: VoiceServiceEvent) => ipcRenderer.send(IPC.voiceEvent, event),
-    playback: (state: 'started' | 'finished') => ipcRenderer.send(IPC.voicePlayback, state),
+    playback: (event: VoicePlaybackEvent) => ipcRenderer.send(IPC.voicePlayback, event),
+  },
+  audio: {
+    listDevices: (): Promise<AudioDevice[]> => ipcRenderer.invoke(IPC.audioListDevices),
+    getState: (): Promise<AudioRuntimeState> => ipcRenderer.invoke(IPC.audioGetState),
+    getRouting: (): Promise<RoutingSnapshot> => ipcRenderer.invoke(IPC.audioGetRouting),
+    snapshotRouting: (): Promise<RoutingSnapshot> => ipcRenderer.invoke(IPC.audioSnapshotRouting),
+    applyRouting: (): Promise<RoutingSnapshot> => ipcRenderer.invoke(IPC.audioApplyRouting),
+    restoreRouting: (): Promise<{ restored: number; skipped: number }> => ipcRenderer.invoke(IPC.audioRestoreRouting),
   },
   avatar: {
     setVisible: (visible: boolean): Promise<void> => ipcRenderer.invoke(IPC.avatarSetVisible, visible),

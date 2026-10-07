@@ -8,7 +8,8 @@ import { createMemoryStore } from './features/memory';
 import { PluginHost } from '../src/core/plugins/PluginHost';
 import { FriendOrchestrator } from '../src/core/orchestrator/FriendOrchestrator';
 import { VisionService } from '../src/core/screen/VisionService';
-import { VoicevoxClient, type TtsAdapter } from '../src/core/voice/VoicevoxClient';
+import { VoicevoxClient } from '../src/core/voice/VoicevoxClient';
+import type { TtsAdapter } from '../src/core/voice/TtsAdapter';
 import { TarkovPlugin } from '../src/plugins/tarkov/TarkovPlugin';
 import { FrameBridge, type CaptureState } from './frameBridge';
 import type { SettingsStore } from './settings';
@@ -53,7 +54,7 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
     chat: () => ollama.ping(),
     // Vision runs on the same Ollama instance.
     vision: () => ollama.ping(),
-    tts: () => voice.tts.ping(),
+    tts: () => voice.tts.health(),
     stt: async () => {
       try {
         return (await fetch(`${VOICE_SERVICE_URL}/health`)).ok;

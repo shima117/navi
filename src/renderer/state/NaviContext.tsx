@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { CaptureSource, FriendPush, NaviSettings } from '../../../electron/ipc';
 import { PROFILES } from '../../core/resource/ResourceGovernor';
 import { ScreenStreamManager } from '../ScreenStreamManager';
-import { SpeechPlayer } from '../SpeechPlayer';
+import { SpeechPlayer, type OutputSelection } from '../SpeechPlayer';
 import { VoiceClient } from '../VoiceClient';
 
 export interface TranscriptLine {
@@ -18,6 +18,7 @@ export interface NaviState {
   paused: boolean;
   micOn: boolean;
   voiceConnected: boolean;
+  audioOutput: OutputSelection;
   plugin: string | null;
   settings: NaviSettings | null;
   /** Live share stream for previews (null when not sharing). */
@@ -49,6 +50,7 @@ export function NaviProvider({ children }: { children: ReactNode }) {
   const [paused, setPaused] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [voiceConnected, setVoiceConnected] = useState(false);
+  const [audioOutput, setAudioOutput] = useState<OutputSelection>({ status: 'missing', deviceId: null, label: null });
   const [plugin, setPlugin] = useState<string | null>(null);
   const [settings, setSettings] = useState<NaviSettings | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -74,10 +76,10 @@ export function NaviProvider({ children }: { children: ReactNode }) {
           setLines((ls) => [...ls.slice(-200), { role: p.role, text: p.text, at: p.at }]);
           break;
         case 'speech':
-          if (p.audio) void playerRef.current!.play(p.audio, p.lipsync).catch((e) => console.error('[speech]', e));
+          if (p.audio) void playerRef.current!.enqueue(p.audio, p.lipsync, p.backchannel ?? false, Boolean(p.interrupt)).catch((e) => console.error('[speech]', e));
           break;
         case 'stopSpeech':
-          playerRef.current!.stop();
+          playerRef.current!.stop(p.fadeMs);
           break;
         case 'health':
           setHealth(p.services);
@@ -93,6 +95,17 @@ export function NaviProvider({ children }: { children: ReactNode }) {
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (!settings) return;
+    void playerRef.current!
+      .configureOutput(settings.audio.naviOutputDeviceName, settings.audio.fallbackOutputDeviceId)
+      .then(setAudioOutput)
+      .catch((err) => {
+        console.error('[speech] output discovery failed', err);
+        setAudioOutput({ status: 'missing', deviceId: null, label: null });
+      });
+  }, [settings?.audio.naviOutputDeviceName, settings?.audio.fallbackOutputDeviceId]);
 
   const updateSettings = useCallback(async (patch: Partial<NaviSettings>) => {
     setSettings(await window.navi.settings.set(patch));
@@ -137,7 +150,7 @@ export function NaviProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      await voiceRef.current!.start(settings?.micDeviceId ?? null);
+      await voiceRef.current!.start(settings?.audio.userMicDeviceId ?? settings?.micDeviceId ?? null);
       setMicOn(true);
     } catch (e) {
       console.error('[mic]', e);
@@ -152,6 +165,7 @@ export function NaviProvider({ children }: { children: ReactNode }) {
       paused,
       micOn,
       voiceConnected,
+      audioOutput,
       plugin,
       settings,
       stream,
@@ -164,7 +178,7 @@ export function NaviProvider({ children }: { children: ReactNode }) {
       togglePause,
       toggleMic,
     }),
-    [lines, health, sharing, paused, micOn, voiceConnected, plugin, settings, stream, updateSettings, refreshSettings, submitText, startShare, stopShare, togglePause, toggleMic],
+    [lines, health, sharing, paused, micOn, voiceConnected, audioOutput, plugin, settings, stream, updateSettings, refreshSettings, submitText, startShare, stopShare, togglePause, toggleMic],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

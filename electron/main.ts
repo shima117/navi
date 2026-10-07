@@ -25,16 +25,20 @@ app.whenReady().then(async () => {
   }
 
   let stopping = false;
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     if (stopping) return;
+    event.preventDefault();
     stopping = true;
-    ctx.bus.emit('session.ended', { at: Date.now() });
-    for (const f of [...FEATURES].reverse()) {
-      try {
-        void f.stop?.(ctx);
-      } catch (err) {
-        console.error(`[feature:${f.name}] stop failed`, err);
+    void (async () => {
+      ctx.bus.emit('session.ended', { at: Date.now() });
+      for (const f of [...FEATURES].reverse()) {
+        try {
+          await f.stop?.(ctx);
+        } catch (err) {
+          console.error(`[feature:${f.name}] stop failed`, err);
+        }
       }
-    }
+      app.quit();
+    })();
   });
 });

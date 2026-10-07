@@ -1,6 +1,6 @@
 import type { VoiceServiceEvent } from '../../electron/ipc';
 
-const VOICE_WS = 'ws://127.0.0.1:17650/ws';
+const VOICE_WS = 'ws://127.0.0.1:17650/ws?source=USER_MIC';
 const TARGET_RATE = 16_000;
 
 // Downsamples mic audio to 16 kHz mono Int16 and posts ~32 ms chunks.
@@ -68,6 +68,10 @@ export class VoiceClient {
       if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(e.data);
     };
     src.connect(node);
+    // Keep the worklet in the render graph without monitoring the microphone.
+    const silent = this.ctx.createGain();
+    silent.gain.value = 0;
+    node.connect(silent).connect(this.ctx.destination);
     this.connect();
   }
 
