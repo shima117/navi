@@ -1,0 +1,32 @@
+{
+  "name": "navi",
+  "productName": "NAVI",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NAVI Friend System — local-first AI friend that watches your shared screen and chats with you",
+  "type": "module",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && npm run build:electron",
+    "build:electron": "tsc -p tsconfig.electron.json && node -e \"require('fs').writeFileSync('dist-electron/package.json', JSON.stringify({type:'commonjs'}))\"",
+    "start": "npm run build && electron .",
+    "electron:dev": "npm run build:electron && electron . --dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^38.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
