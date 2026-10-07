@@ -140,7 +140,7 @@ test('avatar window closed: the conversation continues', async () => {
     return Boolean(avatar);
   });
   expect(closed).toBe(true);
-  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.webContents.getURL().endsWith('/avatar.html')).length)).toBe(0);
 
   await say(page, '今日仕事だるかった');
   await expect(naviLines(page).last()).toContainText('お疲れさまです');

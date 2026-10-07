@@ -6,6 +6,7 @@ import { GamesTab } from './GamesTab';
 import { MemoryTab } from './MemoryTab';
 import { SettingsTab } from './SettingsTab';
 import { SharedScreenTab } from './SharedScreenTab';
+import { TasksTab } from './TasksTab';
 
 export interface TabDef {
   id: string;
@@ -16,6 +17,7 @@ export interface TabDef {
 /** Main-window tabs (§14), in display order. */
 export const TABS: TabDef[] = [
   { id: 'friend', label: 'Friend', component: FriendTab },
+  { id: 'tasks', label: '作業', component: TasksTab },
   { id: 'screen', label: 'Shared Screen', component: SharedScreenTab },
   { id: 'games', label: 'Games', component: GamesTab },
   { id: 'memory', label: 'Memory', component: MemoryTab },

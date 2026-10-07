@@ -39,6 +39,7 @@ export interface NaviEvents {
   'friend.response': CompanionResponse;
   'friend.speak': { text: string; cue: PerformanceCue; presentation?: 'voice' | 'text' | 'both'; textMode?: 'ANSWER' | 'TASK_STATUS' };
   'task.snapshot': { snapshot: TaskSnapshot; report?: OperationReport };
+  'task.report': TaskSnapshot;
   'friend.silent': { reason: string };
 
   'avatar.performance': PerformanceCue;

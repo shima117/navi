@@ -50,7 +50,10 @@ npm start                            # build して起動
 「進捗をテキストで出して」は最新のローカル状態から回答し、作業がなければそう伝えます。
 「次」「前」「消して」「文字を大きくして」「文字を固定して」に対応します。
 Settings の「デスクトップの文字表示」で見た目・位置・クリック透過を変更できます。
-バックグラウンドでのコード修正・PC操作 worker はまだ実装していません。
+「NAVIの環境を確認して」で固定ローカルサービスを、「プロジェクトを確認して」で選択したフォルダの package.json を裏で読み取り確認します。
+「作業」タブから状態・結果・個別停止・再開・全体中止を操作できます。「やめて」で裏作業を中止します。
+作業は別プロセスで実行し、履歴は `userData/tasks.sqlite` にローカル保存します（選択したパス・確認結果を含みます）。
+アプリ再起動後の未完了作業は保留され、勝手には再実行しません。任意のコード修正・PC操作・インストール・Cloud 使用はまだ無効です。
 
 ```
 electron/            main プロセス (ウィンドウ, IPC §17, サービス配線) と最小 preload
@@ -66,9 +69,9 @@ src/core/            Friend Core — ゲーム固有ロジックを置かない
   voice/             FloorManager, 相槌/割り込み/継続/エコー判定, VOICEVOX, AudioQuery → 口パク
   resource/          ResourceGovernor (GAME_PRIORITY / BALANCED / DESKTOP_CHAT)
   memory/            MemoryStore (SQLite + インメモリ退避), MemoryWriter, SessionSummarizer, 秘密情報の伏せ字化
+  tasks/             TaskRegistry / SQLite / Scheduler / 停止 / 失敗予算 / ResourceLock / CircuitBreaker / 固定読み取り能力
   plugins/           GamePlugin IF (§15), PluginHost — プラグイン障害は Generic に退避
 src/avatar/          AvatarDirector — cue → 60fps パラメータ (表情/ジェスチャ/まばたき/呼吸/口パク/眼鏡追従)
-src/plugins/tarkov/  TarkovPlugin (骨組み; 既存資産の移植は PR-08)
 src/renderer/        FriendShell UI, 画面ストリーム, マイク → 音声サービス, 音声再生, アバター窓
 voice-service/       Python: USER/SYSTEM/REMOTE分離, WebRTC VAD + faster-whisper, Voicemeeter Remote (localhost のみ bind)
 ```
@@ -109,12 +112,13 @@ e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物�
 | PR-05 | Vision (qwen3-vl), 参照語検出, 「今の」バッファ取得, 8B エスカレーション | ✅ |
 | PR-06 | EventBus, InitiativeScheduler, トピック疲労, 集中時抑制 | ✅ |
 | PR-07 | Avatar Runtime | 🟡 AvatarDirector と透過/クリック透過窓まで。PuppetJS (PSD/WebGL) の移植は未着手 — 現在は仮の描画 |
-| PR-08 | Tarkov Plugin | 🟡 IF とツール定義のみ。既存 Tarkov Assistant のドメイン/データ移植は未着手 |
+| PR-08 | Tarkov Plugin | 対象外。ユーザー指示によりプラグインと参照コードを削除 |
 | PR-09 | Memory (SQLite) | ✅ `userData/navi.sqlite` (node:sqlite, FTS5 bigram 検索), セッション/長期の昇格, MemoryWriter, セッション要約, Memory タブ (検索・編集・削除・全消去)。発言ログは既定で保存しない (設定でオン, 保存期間つき)。開けない場合はインメモリに退避 |
 | PR-10 | Hardening | ✅ プロセス監視, 再接続, リソースモード自動切替 (+VRAM 表示), 診断タブ, ローカル専用テレメトリ, 受入テスト (B 沈黙 / C 割り込み / D キャラ評価 / G 障害 e2e) |
 | PR-11 | Full-Duplex Audio / Voicemeeter | 🟡 B2/B3/VAIO3分離, 差分復元, FloorManager, 双方向相槌/割り込み, SpeechChunk, EchoGuard, 音声設定UIまで実装。実マイク + Voicemeeter Potato + VAIO3での30分運用試験と、任意のVoicemod後段統合は未完了 |
 | v3.2 第1区切り | 独立文字窓 / TaskSnapshotPublisher | 🟡 文字表示・音声抑制・設定・Windows E2Eまで。Task DB / AgentService / worker / Protected Coreは次の区切り |
+| v3.2 第2区切り | AgentService / Task DB / 安全な確認作業 | 🟡 別プロセスの実確認・保存・停止・再開・失敗制御まで。任意の書き換え / Cloud承認 / Job Object / Protected Coreは未実装 |
 
 PR-11のSYSTEM音声は、直前6秒のRAMバッファから「突発音の候補」を拾えます。音の種類（銃声など）はまだ判定しません。Voicemodの設定欄は接続実装まで無効です。
 
-既存の Tarkov Assistant / PuppetJS の参照コードは `references/` にあります。PR-07 / PR-08 の参照ロジック移植と実描画検証は未完了です。
+PuppetJS の参照コードは `references/puppetjs/` にあります。Avatar の参照ロジック移植と実描画検証は未完了です。Tarkov は対象から除外しました。
