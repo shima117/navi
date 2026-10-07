@@ -58,6 +58,7 @@ const api = {
   audio: {
     listDevices: (): Promise<AudioDevice[]> => ipcRenderer.invoke(IPC.audioListDevices),
     getState: (): Promise<AudioRuntimeState> => ipcRenderer.invoke(IPC.audioGetState),
+    reportOutput: (output: { status: AudioRuntimeState['vaio3Output']; label: string | null }) => ipcRenderer.send(IPC.audioReportOutput, output),
     getRouting: (): Promise<RoutingSnapshot> => ipcRenderer.invoke(IPC.audioGetRouting),
     snapshotRouting: (): Promise<RoutingSnapshot> => ipcRenderer.invoke(IPC.audioSnapshotRouting),
     applyRouting: (): Promise<RoutingSnapshot> => ipcRenderer.invoke(IPC.audioApplyRouting),

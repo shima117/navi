@@ -32,6 +32,23 @@ export const voiceFeature: Feature = {
     let lastNaviInterruptAt = 0;
     let continuationPrefix = '';
     let pendingTranscript: { text: string; event: Extract<VoiceServiceEvent, { type: 'transcript' }>; timer: ReturnType<typeof setTimeout> } | null = null;
+    let warmedVoiceId: string | null = null;
+    let warming = false;
+
+    const warmBackchannels = async () => {
+      if (warming || !ctx.health.isHealthy('tts') || warmedVoiceId === ctx.voice.tts.id) return;
+      warming = true;
+      const adapter = ctx.voice.tts;
+      try {
+        await Promise.all(PREWARM.map((text) => cache.get(adapter, text, director.performance('neutral', 0.25, 'thin'))));
+        warmedVoiceId = adapter.id;
+      } catch (err) {
+        console.warn('[voice] backchannel prewarm failed', err);
+      } finally {
+        warming = false;
+        if (adapter.id !== ctx.voice.tts.id) void warmBackchannels();
+      }
+    };
 
     const floor = new FloorManager({
       fadeNavi: (fadeMs) => windows.push({ type: 'stopSpeech', fadeMs }),
@@ -47,7 +64,12 @@ export const voiceFeature: Feature = {
       if (next.speakerId !== prev.speakerId) {
         ctx.voice.tts = new VoicevoxClient(next.speakerId);
         generation++;
+        warmedVoiceId = null;
+        void warmBackchannels();
       }
+    });
+    bus.on('health.changed', ({ service, ok }) => {
+      if (service === 'tts' && ok) void warmBackchannels();
     });
 
     bus.on('friend.speak', ({ text, cue }) => {
@@ -93,24 +115,21 @@ export const voiceFeature: Feature = {
         if (ev.source !== 'USER_MIC') return;
         if (isPlaybackEcho(ev.text, ev.echoCorrelation ?? 0, playbackText, playbackStartedAt, floor.state)) return;
         bus.emit('voice.partial', ev);
-        if (floor.state === 'NAVI_TAKEOVER') {
-          floor.userContinuedAfterNaviInterrupt();
-          return;
-        }
+        if (floor.userContinuedAfterNaviInterrupt()) return;
         const intent = floor.userPartial({ text: ev.text, durationMs: ev.durationMs, energy: ev.energy, final: false }, ev.source);
         if (intent !== 'TAKEOVER') {
           if (!interruptPending && ev.at - lastNaviInterruptAt >= 4_000) {
             interruptPending = true;
-            void maybeNaviInterrupt(ctx, cache, director, ev.text, ev.durationMs, floor)
+            void maybeNaviInterrupt(ctx, cache, director, ev.text, ev.durationMs, floor, (spoken) => { playbackText = spoken; })
               .then((spoke) => {
                 if (spoke) lastNaviInterruptAt = ev.at;
-                else void maybeBackchannel(ctx, cache, director, backchannels, ev.text, ev.durationMs, ev.at, floor);
+                else void maybeBackchannel(ctx, cache, director, backchannels, ev.text, ev.durationMs, ev.at, floor, (spoken) => { playbackText = spoken; });
               })
               .finally(() => {
                 interruptPending = false;
               });
           } else {
-            void maybeBackchannel(ctx, cache, director, backchannels, ev.text, ev.durationMs, ev.at, floor);
+            void maybeBackchannel(ctx, cache, director, backchannels, ev.text, ev.durationMs, ev.at, floor, (spoken) => { playbackText = spoken; });
           }
         }
         return;
@@ -131,6 +150,7 @@ export const voiceFeature: Feature = {
           continuationPrefix = '';
         }
         if (isPlaybackEcho(text, ev.echoCorrelation ?? 0, playbackText, playbackStartedAt, floor.state)) return;
+        floor.userContinuedAfterNaviInterrupt();
         const intent = floor.userPartial(
           { text, durationMs: ev.durationMs ?? 1_000, energy: ev.energy ?? 0.5, final: true },
           ev.source,
@@ -165,12 +185,6 @@ export const voiceFeature: Feature = {
       }
     });
 
-    // Cache short clips without delaying app startup. Failure only disables instant backchannels.
-    queueMicrotask(() => {
-      void Promise.all(
-        PREWARM.map((text) => cache.get(ctx.voice.tts, text, director.performance('neutral', 0.25, 'thin'))),
-      ).catch((err) => console.warn('[voice] backchannel prewarm failed', err));
-    });
   },
 };
 
@@ -189,6 +203,7 @@ async function maybeNaviInterrupt(
   partial: string,
   durationMs: number,
   floor: FloorManager,
+  rememberPlayback: (text: string) => void,
 ): Promise<boolean> {
   const audio = ctx.settings.current.audio;
   if (!audio.naviInterruptions || !ctx.health.isHealthy('tts') || floor.state !== 'USER_SPEAKING') return false;
@@ -197,6 +212,8 @@ async function maybeNaviInterrupt(
   try {
     const result = await cache.get(ctx.voice.tts, decision.text, director.performance('surprised', 0.45, 'thin'));
     if (floor.state !== 'USER_SPEAKING') return false;
+    rememberPlayback(decision.text);
+    void sendPlaybackReference(result.audio);
     ctx.windows.push({
       type: 'speech',
       text: decision.text,
@@ -258,6 +275,7 @@ async function maybeBackchannel(
   durationMs: number,
   at: number,
   floor: FloorManager,
+  rememberPlayback: (text: string) => void,
 ): Promise<void> {
   if (!ctx.settings.current.audio.naviBackchannel || !ctx.health.isHealthy('tts')) return;
   if (floor.state !== 'USER_SPEAKING') return;
@@ -269,6 +287,8 @@ async function maybeBackchannel(
   try {
     const result = await cache.get(ctx.voice.tts, decision.text, director.performance(mood === 'surprised' ? 'surprised' : 'neutral', 0.3, 'thin'));
     if (floor.state !== 'USER_SPEAKING') return;
+    rememberPlayback(decision.text);
+    void sendPlaybackReference(result.audio);
     ctx.windows.push({
       type: 'speech', text: decision.text, audio: result.audio,
       lipsync: result.query ? buildLipSyncTimeline(result.query) : [], backchannel: true,

@@ -24,6 +24,8 @@ export class SpeechPlayer {
   private ctx: SinkAudioContext | null = null;
   private current: { source: AudioBufferSourceNode; gain: GainNode; backchannel: boolean; interrupt: boolean } | null = null;
   private queue: QueuedSpeech[] = [];
+  private decoding = false;
+  private generation = 0;
   private output: OutputSelection = { status: 'missing', deviceId: null, label: null };
 
   get outputSelection(): OutputSelection {
@@ -34,22 +36,32 @@ export class SpeechPlayer {
     this.ctx ??= new AudioContext() as SinkAudioContext;
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput');
     const wanted = preferredName.toLowerCase();
+    const aliases = wanted.includes('vaio3') ? VAIO3_NAMES : [];
     const match = devices.find((d) => {
       const label = d.label.toLowerCase();
-      return label.includes(wanted) || VAIO3_NAMES.some((token) => label.includes(token));
+      return (wanted !== '' && label.includes(wanted)) || aliases.some((token) => label.includes(token));
     });
     const fallback = fallbackDeviceId ? devices.find((d) => d.deviceId === fallbackDeviceId) : null;
-    const selected = match ?? fallback ?? devices.find((d) => d.deviceId === 'default') ?? null;
-    if (selected && this.ctx.setSinkId) {
-      try {
-        await this.ctx.setSinkId(selected.deviceId);
-      } catch (err) {
-        console.warn('[speech] output selection failed', err);
+    const defaultDevice = devices.find((d) => d.deviceId === 'default') ?? null;
+    let active: MediaDeviceInfo | null = null;
+    if (this.ctx.setSinkId) {
+      const available = [match, fallback, defaultDevice].filter((device): device is MediaDeviceInfo => device !== null);
+      const candidates = available.filter((device, index) => available.findIndex((entry) => entry.deviceId === device.deviceId) === index);
+      for (const candidate of candidates) {
+        try {
+          await this.ctx.setSinkId(candidate.deviceId);
+          active = candidate;
+          break;
+        } catch (err) {
+          console.warn('[speech] output selection failed', err);
+        }
       }
+    } else {
+      active = defaultDevice;
     }
-    this.output = match
+    this.output = match && active?.deviceId === match.deviceId
       ? { status: 'connected', deviceId: match.deviceId, label: match.label }
-      : { status: selected ? 'fallback' : 'missing', deviceId: selected?.deviceId ?? null, label: selected?.label ?? null };
+      : { status: active ? 'fallback' : 'missing', deviceId: active?.deviceId ?? null, label: active?.label ?? null };
     return this.output;
   }
 
@@ -60,7 +72,7 @@ export class SpeechPlayer {
 
   async enqueue(audio: ArrayBuffer, lipsync: LipSyncFrames, backchannel = false, interrupt = false): Promise<void> {
     this.queue.push({ audio: audio.slice(0), lipsync, backchannel, interrupt });
-    if (!this.current) await this.playNext();
+    await this.playNext();
   }
 
   discardPending(): void {
@@ -68,6 +80,7 @@ export class SpeechPlayer {
   }
 
   stop(fadeMs = FADE_OUT_MS): void {
+    this.generation++;
     this.discardPending();
     const cur = this.current;
     if (!cur || !this.ctx) return;
@@ -82,13 +95,25 @@ export class SpeechPlayer {
   }
 
   private async playNext(): Promise<void> {
+    if (this.current || this.decoding) return;
     const item = this.queue.shift();
-    if (!item) {
-      window.navi.voice.playback({ state: 'finished', backchannel: false });
+    if (!item) return;
+    this.decoding = true;
+    const generation = this.generation;
+    this.ctx ??= new AudioContext() as SinkAudioContext;
+    let buffer: AudioBuffer;
+    try {
+      buffer = await this.ctx.decodeAudioData(item.audio);
+    } catch (err) {
+      this.decoding = false;
+      if (generation === this.generation) void this.playNext();
+      throw err;
+    }
+    this.decoding = false;
+    if (generation !== this.generation) {
+      if (this.queue.length) void this.playNext();
       return;
     }
-    this.ctx ??= new AudioContext() as SinkAudioContext;
-    const buffer = await this.ctx.decodeAudioData(item.audio);
     const source = this.ctx.createBufferSource();
     const gain = this.ctx.createGain();
     source.buffer = buffer;
@@ -99,9 +124,17 @@ export class SpeechPlayer {
       if (this.current !== entry) return;
       this.current = null;
       if (!item.backchannel) window.navi.avatar.forwardLipSync(null);
-      if (this.queue.length) void this.playNext();
+      if (this.queue.length) void this.playNext().catch((err) => console.error('[speech] next chunk failed', err));
       else window.navi.voice.playback({ state: 'finished', backchannel: item.backchannel, mode: playbackMode(item) });
     };
+    try {
+      if (this.ctx.state === 'suspended') await this.ctx.resume();
+    } catch (err) {
+      if (this.current === entry) this.current = null;
+      if (this.queue.length) void this.playNext().catch((nextErr) => console.error('[speech] next chunk failed', nextErr));
+      throw err;
+    }
+    if (generation !== this.generation || this.current !== entry) return;
     window.navi.voice.playback({ state: 'started', backchannel: item.backchannel, mode: playbackMode(item) });
     if (!item.backchannel) window.navi.avatar.forwardLipSync(item.lipsync);
     source.start();

@@ -17,6 +17,7 @@ function setup(opts: {
   frame?: boolean;
   chatHealthy?: boolean;
   visionHealthy?: boolean;
+  recentSystemAudio?: () => Promise<{ type: string; confidence: number; at: number } | null>;
 }) {
   const bus = new EventBus();
   const governor = new ResourceGovernor('DESKTOP_CHAT');
@@ -44,6 +45,7 @@ function setup(opts: {
     isHealthy: (s) => (s === 'chat' ? (opts.chatHealthy ?? true) : (opts.visionHealthy ?? true)),
     sharing: () => true,
     now: () => 1_000,
+    recentSystemAudio: opts.recentSystemAudio,
   });
   return { bus, orch, spoken, silent, plugins };
 }
@@ -166,5 +168,18 @@ describe('FriendOrchestrator', () => {
     const last = orch.conversation.recentTurns(1)[0]!;
     expect(last.role).toBe('navi');
     expect(last.interrupted).toBe(true);
+  });
+
+  it('uses a recent SYSTEM transient only when asked about a sound, without naming its cause', async () => {
+    const chat = new FakeOllama([reply('大きな音はありましたが、種類までは分かりません。')]);
+    const { orch } = setup({
+      chat,
+      recentSystemAudio: async () => ({ type: 'transient_candidate', confidence: 0.48, at: 950 }),
+    });
+    await orch.handleUtterance(utt('今の音何？'));
+    const context = chat.calls[0]!.messages[1]!.content;
+    expect(context).toContain('突発音の候補');
+    expect(context).toContain('音の正体は未判定');
+    expect(context).not.toContain('銃声');
   });
 });

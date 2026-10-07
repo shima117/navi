@@ -39,6 +39,7 @@ export const IPC = {
 
   audioListDevices: 'audio:listDevices',
   audioGetState: 'audio:getState',
+  audioReportOutput: 'audio:reportOutput',
   audioGetRouting: 'audio:getRouting',
   audioApplyRouting: 'audio:applyRouting',
   audioSnapshotRouting: 'audio:snapshotRouting',
@@ -113,6 +114,8 @@ export interface NaviSettings {
 
 export interface AudioSettings {
   userMicDeviceId: string | null;
+  systemInputDeviceId: string | null;
+  remoteInputDeviceId: string | null;
   naviOutputDeviceName: string;
   fallbackOutputDeviceId: string | null;
   systemListenBus: 'B2';
@@ -133,6 +136,8 @@ export interface AudioSettings {
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   userMicDeviceId: null,
+  systemInputDeviceId: null,
+  remoteInputDeviceId: null,
   naviOutputDeviceName: 'Voicemeeter VAIO3 Input',
   fallbackOutputDeviceId: null,
   systemListenBus: 'B2',

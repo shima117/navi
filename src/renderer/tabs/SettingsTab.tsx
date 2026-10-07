@@ -5,7 +5,8 @@ import { useNavi } from '../state/NaviContext';
 
 export function SettingsTab() {
   const { settings, updateSettings, health, audioOutput } = useNavi();
-  const [devices, setDevices] = useState<AudioDevice[]>([]);
+  const [browserDevices, setBrowserDevices] = useState<AudioDevice[]>([]);
+  const [serviceDevices, setServiceDevices] = useState<AudioDevice[]>([]);
   const [audioState, setAudioState] = useState<AudioRuntimeState | null>(null);
   const [audioMessage, setAudioMessage] = useState('');
 
@@ -19,7 +20,8 @@ export function SettingsTab() {
       const service = await window.navi.audio.listDevices().catch(() => [] as AudioDevice[]);
       const state = await window.navi.audio.getState().catch(() => null);
       if (active) {
-        setDevices([...local, ...service.filter((d) => !local.some((x) => x.kind === d.kind && x.name === d.name))]);
+        setBrowserDevices(local);
+        setServiceDevices(service);
         setAudioState(state);
       }
     };
@@ -106,7 +108,7 @@ export function SettingsTab() {
           ユーザーマイク
           <select value={settings.audio.userMicDeviceId ?? ''} onChange={(e) => void updateAudio({ userMicDeviceId: e.target.value || null })}>
             <option value="">OSの既定</option>
-            {devices.filter((d) => d.kind === 'input').map((d) => <option key={`in-${d.id}-${d.name}`} value={d.id}>{d.name}</option>)}
+            {browserDevices.filter((d) => d.kind === 'input').map((d) => <option key={`in-${d.id}-${d.name}`} value={d.id}>{d.name}</option>)}
           </select>
         </label>
         <label className="field">
@@ -117,7 +119,21 @@ export function SettingsTab() {
           VAIO3がない場合の出力先
           <select value={settings.audio.fallbackOutputDeviceId ?? ''} onChange={(e) => void updateAudio({ fallbackOutputDeviceId: e.target.value || null })}>
             <option value="">OSの既定</option>
-            {devices.filter((d) => d.kind === 'output').map((d) => <option key={`out-${d.id}-${d.name}`} value={d.id}>{d.name}</option>)}
+            {browserDevices.filter((d) => d.kind === 'output').map((d) => <option key={`out-${d.id}-${d.name}`} value={d.id}>{d.name}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          SYSTEM入力（Voicemeeter B2）
+          <select value={settings.audio.systemInputDeviceId ?? ''} onChange={(e) => void updateAudio({ systemInputDeviceId: e.target.value || null })}>
+            <option value="">B2入力を自動検出</option>
+            {serviceDevices.filter((d) => d.kind === 'input').map((d) => <option key={`system-${d.id}`} value={d.id}>{d.name}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          REMOTE入力（Voicemeeter B3）
+          <select value={settings.audio.remoteInputDeviceId ?? ''} onChange={(e) => void updateAudio({ remoteInputDeviceId: e.target.value || null })}>
+            <option value="">B3入力を自動検出</option>
+            {serviceDevices.filter((d) => d.kind === 'input').map((d) => <option key={`remote-${d.id}`} value={d.id}>{d.name}</option>)}
           </select>
         </label>
         <div className="audio-grid">
@@ -137,7 +153,7 @@ export function SettingsTab() {
           </select>
         </label>
         <label className="check"><input type="checkbox" checked={settings.audio.voicemeeterAutoConfigure} onChange={(e) => void updateAudio({ voicemeeterAutoConfigure: e.target.checked })} />起動時に安全なNAVI用ルーティングを適用</label>
-        <label className="check"><input type="checkbox" checked={settings.audio.voicemodEnabled} onChange={(e) => void updateAudio({ voicemodEnabled: e.target.checked })} />Voicemodを最後段で使う（未接続時は自動で素通し）</label>
+        <label className="check"><input type="checkbox" checked={false} disabled />Voicemod後段（音声本体の実機検証後に対応）</label>
         <div className="row audio-actions">
           <button onClick={() => void runRouting('snapshot')}>現在設定を保存</button>
           <button onClick={() => void runRouting('apply')}>NAVI用設定を適用</button>

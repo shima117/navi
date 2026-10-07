@@ -27,6 +27,8 @@ python -m navi_voice.server          # ws://127.0.0.1:17650/ws
 # Voicemeeter Potatoで PC/Game=B2、Discord等の通話相手=B3、NAVI出力=VAIO3 を用意。
 # NAVIの Settings > 音声・Voicemeeter から現在設定を保存して適用する。
 # NAVIはVAIO3 Gainを変更しないため、右端フェーダーをNAVI専用音量として使えます。
+# 手動起動の場合、復元ジャーナルの保存先は既定で %USERPROFILE%\.navi です。
+# NAVIから音声サービスを起動すると、同じデータはアプリのuserDataに保存されます。
 
 # 4. アプリ
 npm install
@@ -103,5 +105,7 @@ e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物�
 | PR-09 | Memory (SQLite) | ✅ `userData/navi.sqlite` (node:sqlite, FTS5 bigram 検索), セッション/長期の昇格, MemoryWriter, セッション要約, Memory タブ (検索・編集・削除・全消去)。発言ログは既定で保存しない (設定でオン, 保存期間つき)。開けない場合はインメモリに退避 |
 | PR-10 | Hardening | ✅ プロセス監視, 再接続, リソースモード自動切替 (+VRAM 表示), 診断タブ, ローカル専用テレメトリ, 受入テスト (B 沈黙 / C 割り込み / D キャラ評価 / G 障害 e2e) |
 | PR-11 | Full-Duplex Audio / Voicemeeter | 🟡 B2/B3/VAIO3分離, 差分復元, FloorManager, 双方向相槌/割り込み, SpeechChunk, EchoGuard, 音声設定UIまで実装。実マイク + Voicemeeter Potato + VAIO3での30分運用試験と、任意のVoicemod後段統合は未完了 |
+
+PR-11のSYSTEM音声は、直前6秒のRAMバッファから「突発音の候補」を拾えます。音の種類（銃声など）はまだ判定しません。Voicemodの設定欄は接続実装まで無効です。
 
 既存の Tarkov Assistant / PuppetJS のコードはこのリポジトリに含まれていないため、PR-07 / PR-08 はそれらを取り込んだ後に進めます。

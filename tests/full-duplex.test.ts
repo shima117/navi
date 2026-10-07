@@ -40,6 +40,29 @@ describe('full-duplex floor control', () => {
     expect(floor.state).toBe('NAVI_SPEAKING');
     expect(actions.fadeNavi).not.toHaveBeenCalled();
   });
+
+  it('yields a NAVI backchannel without marking the prior assistant turn interrupted', () => {
+    const actions = { fadeNavi: vi.fn(), discardPendingChunks: vi.fn(), stopLipSync: vi.fn(), markInterrupted: vi.fn() };
+    const floor = new FloorManager(actions);
+    floor.userSpeechStarted('USER_MIC');
+    floor.naviStarted(true);
+    floor.userPartial({ text: '話を続けているよ', durationMs: 1_200, energy: 0.5, final: false }, 'USER_MIC');
+    expect(actions.fadeNavi).toHaveBeenCalledWith(100);
+    expect(actions.markInterrupted).not.toHaveBeenCalled();
+    expect(floor.state).toBe('USER_SPEAKING');
+  });
+
+  it('yields a soft NAVI interruption when the user keeps talking', () => {
+    const actions = { fadeNavi: vi.fn(), discardPendingChunks: vi.fn(), stopLipSync: vi.fn(), markInterrupted: vi.fn() };
+    const floor = new FloorManager(actions);
+    floor.userSpeechStarted('USER_MIC');
+    floor.naviTakeoverStarted();
+    floor.userSpeechStarted('USER_MIC');
+    expect(floor.userContinuedAfterNaviInterrupt()).toBe(true);
+    expect(actions.fadeNavi).toHaveBeenCalledWith(100);
+    expect(actions.markInterrupted).not.toHaveBeenCalled();
+    expect(floor.state).toBe('USER_SPEAKING');
+  });
 });
 
 describe('speech policies', () => {

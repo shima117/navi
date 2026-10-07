@@ -20,7 +20,9 @@ export function voiceStyleFor(emotion: string, intensity: number, temperature: s
 }
 
 export class VoicevoxClient implements TtsAdapter {
-  readonly id = 'voicevox';
+  get id(): string {
+    return `voicevox-${this.speakerId}`;
+  }
   constructor(
     private readonly speakerId: number,
     private readonly baseUrl = 'http://127.0.0.1:50021',

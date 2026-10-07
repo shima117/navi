@@ -100,10 +100,14 @@ export function NaviProvider({ children }: { children: ReactNode }) {
     if (!settings) return;
     void playerRef.current!
       .configureOutput(settings.audio.naviOutputDeviceName, settings.audio.fallbackOutputDeviceId)
-      .then(setAudioOutput)
+      .then((output) => {
+        setAudioOutput(output);
+        window.navi.audio.reportOutput({ status: output.status, label: output.label });
+      })
       .catch((err) => {
         console.error('[speech] output discovery failed', err);
         setAudioOutput({ status: 'missing', deviceId: null, label: null });
+        window.navi.audio.reportOutput({ status: 'missing', label: null });
       });
   }, [settings?.audio.naviOutputDeviceName, settings?.audio.fallbackOutputDeviceId]);
 

@@ -23,6 +23,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSoc
 from pydantic import BaseModel
 
 from .audio.capture import InputCapture, find_input_device, list_devices
+from .audio.events import AudioEventClassifier, classify_recent
 from .audio.router import AudioRouter, RoutedAudio
 from .audio.sources import AudioSource
 from .segmenter import SAMPLE_RATE, FrameAssembler, Segmenter
@@ -40,6 +41,7 @@ _executor = ThreadPoolExecutor(max_workers=1)
 _model = None
 _router = AudioRouter()
 _voicemeeter = VoicemeeterController()
+_system_events = AudioEventClassifier()
 
 
 def get_model():
@@ -182,7 +184,10 @@ async def stop_audio():
 
 @app.get("/audio/recent/{source}")
 def recent_audio(source: str, seconds: float = 4.0):
-    parsed = AudioSource.parse(source)
+    try:
+        parsed = AudioSource.parse(source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if parsed not in (AudioSource.SYSTEM, AudioSource.REMOTE):
         raise HTTPException(status_code=400, detail="recent export is limited to context sources")
     data = _router.recent(parsed, max(0.0, min(6.0, seconds)))
@@ -191,6 +196,14 @@ def recent_audio(source: str, seconds: float = 4.0):
         media_type="audio/L16;rate=16000;channels=1",
         headers={"X-Navi-Audio-Source": parsed.value, "X-Navi-Sample-Rate": str(SAMPLE_RATE)},
     )
+
+
+@app.get("/audio/classify/recent")
+def classify_recent_system_audio(seconds: float = 6.0):
+    duration = max(0.5, min(6.0, seconds))
+    pcm = _router.recent(AudioSource.SYSTEM, duration)
+    event = classify_recent(pcm, now_ms())
+    return {"source": AudioSource.SYSTEM.value, "event": event.json() if event else None}
 
 
 @app.post("/audio/reference")
@@ -343,6 +356,11 @@ async def _capture_worker() -> None:
         routed = await _capture_queue.get()
         if routed.source not in pipelines:
             continue
+        if routed.source == AudioSource.SYSTEM:
+            detected = _system_events.process(routed.pcm16_mono_16k, now_ms())
+            if detected:
+                await _hub.publish({"type": "system_event", "event": detected.type, "confidence": detected.confidence,
+                                    "at": detected.at, "source": "SYSTEM"})
         assembler, segmenter = pipelines[routed.source]
         for frame in assembler.feed(routed.pcm16_mono_16k):
             for ev in segmenter.push(frame, vad.is_speech(frame, SAMPLE_RATE)):

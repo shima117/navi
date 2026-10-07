@@ -70,6 +70,8 @@ export function configProblem(cfg: ManagedProcessesSettings, id: ManagedProcessI
 export interface SpecContext {
   /** Used when the voice service cwd is left empty (the repo's voice-service/ folder). */
   defaultVoiceServiceCwd: string;
+  /** Keep Voicemeeter restore journals in this Electron profile. */
+  voiceServiceUserData?: string;
 }
 
 /** Specs for the enabled, valid helpers only. */
@@ -83,7 +85,11 @@ export function buildProcessSpecs(cfg: ManagedProcessesSettings, ctx: SpecContex
       args: ['-m', 'navi_voice.server'],
       cwd: unquote(cfg.voiceService.cwd) || ctx.defaultVoiceServiceCwd,
       // Unbuffered UTF-8 stderr so crash output reaches the Diagnostics tab intact (Windows defaults to cp932).
-      env: { PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' },
+      env: {
+        PYTHONUNBUFFERED: '1',
+        PYTHONIOENCODING: 'utf-8',
+        ...(ctx.voiceServiceUserData ? { NAVI_USER_DATA: ctx.voiceServiceUserData } : {}),
+      },
       healthUrl: HEALTH_URLS['voice-service'],
     });
   }

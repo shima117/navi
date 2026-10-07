@@ -59,6 +59,7 @@ class VoicemeeterController:
         self._lock = RLock()
         self.state_dir = state_dir or Path(os.environ.get("NAVI_USER_DATA", Path.home() / ".navi"))
         self.snapshot_file = self.state_dir / "voicemeeter_snapshot.json"
+        self.manual_snapshot_file = self.state_dir / "voicemeeter_manual_snapshot.json"
         self.crash_file = self.state_dir / "last_session_audio_state.json"
 
     def detect(self) -> dict:
@@ -130,23 +131,34 @@ class VoicemeeterController:
         snapshot = self.read_routing()
         if save:
             self.state_dir.mkdir(parents=True, exist_ok=True)
-            self.snapshot_file.write_text(json.dumps(snapshot.json(), ensure_ascii=False, indent=2), encoding="utf-8")
+            # A user-requested backup must not replace the active restore journal.
+            self.manual_snapshot_file.write_text(json.dumps(snapshot.json(), ensure_ascii=False, indent=2), encoding="utf-8")
         return snapshot
 
     def auto_configure(self) -> RoutingSnapshot:
         with self._lock:
-            snapshot = self.snapshot(save=True)
+            # Re-applying while NAVI owns routes must retain the original values.
+            pending = self.crash_recovery()["pending"]
+            snapshot = self._load_restore_snapshot() if pending else self.read_routing()
             if snapshot.voicemeeterType != "potato":
                 raise RuntimeError("Voicemeeter Potato is required for VAIO3 routing")
+            if not pending:
+                self.state_dir.mkdir(parents=True, exist_ok=True)
+                self.snapshot_file.write_text(json.dumps(snapshot.json(), ensure_ascii=False, indent=2), encoding="utf-8")
+                self._write_session_state(snapshot, active=True)
             # Potato virtual strips are 5=VAIO, 6=AUX, 7=VAIO3. Only disable feedback buses.
             for route in ("B1", "B2", "B3"):
                 parameter = f"Strip[7].{route}"
                 before = self._get(parameter)
+                previous = next((change for change in snapshot.changed if change.parameter == parameter), None)
+                # The user moved this route since NAVI applied it; a re-apply must respect that.
+                if previous is not None:
+                    continue
                 if before != 0.0:
-                    self._set(parameter, 0.0)
                     snapshot.changed.append(ChangedParameter(parameter, before, 0.0))
-            self._write_session_state(snapshot, active=True)
-            self.snapshot_file.write_text(json.dumps(snapshot.json(), ensure_ascii=False, indent=2), encoding="utf-8")
+                    # Journal before the native write so a crash between routes is recoverable.
+                    self.snapshot_file.write_text(json.dumps(snapshot.json(), ensure_ascii=False, indent=2), encoding="utf-8")
+                    self._set(parameter, 0.0)
             return snapshot
 
     def restore(self, snapshot: RoutingSnapshot | None = None) -> dict:
@@ -154,15 +166,7 @@ class VoicemeeterController:
             if snapshot is None:
                 if not self.snapshot_file.exists():
                     return {"restored": 0, "skipped": 0}
-                raw = json.loads(self.snapshot_file.read_text(encoding="utf-8"))
-                snapshot = RoutingSnapshot(
-                    version=raw.get("version", 1),
-                    capturedAt=raw.get("capturedAt", ""),
-                    voicemeeterType=raw.get("voicemeeterType", "unknown"),
-                    strips=raw.get("strips", {}),
-                    buses=raw.get("buses", {}),
-                    changed=[ChangedParameter(**x) for x in raw.get("changed", [])],
-                )
+                snapshot = self._load_restore_snapshot()
             restored = skipped = 0
             for change in snapshot.changed:
                 if ".Gain" in change.parameter:
@@ -176,6 +180,17 @@ class VoicemeeterController:
                     skipped += 1
             self._write_session_state(snapshot, active=False)
             return {"restored": restored, "skipped": skipped}
+
+    def _load_restore_snapshot(self) -> RoutingSnapshot:
+        raw = json.loads(self.snapshot_file.read_text(encoding="utf-8"))
+        return RoutingSnapshot(
+            version=raw.get("version", 1),
+            capturedAt=raw.get("capturedAt", ""),
+            voicemeeterType=raw.get("voicemeeterType", "unknown"),
+            strips=raw.get("strips", {}),
+            buses=raw.get("buses", {}),
+            changed=[ChangedParameter(**item) for item in raw.get("changed", [])],
+        )
 
     def crash_recovery(self) -> dict:
         if not self.crash_file.exists():

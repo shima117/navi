@@ -24,6 +24,7 @@ export const TAKEOVER_FADE_MS = 150;
 export class FloorManager {
   private _state: FloorState = 'SILENCE';
   private naviSpeaking = false;
+  private naviMode: 'normal' | 'backchannel' | 'interrupt' = 'normal';
   private userSpeaking = false;
   private lastIntent: UserSpeechIntent | null = null;
 
@@ -39,11 +40,13 @@ export class FloorManager {
 
   naviStarted(backchannel = false): void {
     this.naviSpeaking = true;
+    this.naviMode = backchannel ? 'backchannel' : 'normal';
     this.set(backchannel ? 'NAVI_BACKCHANNEL' : this.userSpeaking ? 'OVERLAP' : 'NAVI_SPEAKING');
   }
 
   naviFinished(): void {
     this.naviSpeaking = false;
+    this.naviMode = 'normal';
     this.set(this.userSpeaking ? 'USER_SPEAKING' : 'SILENCE');
   }
 
@@ -63,12 +66,19 @@ export class FloorManager {
       return intent;
     }
     if (intent === 'TAKEOVER' && this.naviSpeaking) {
+      if (this.naviMode === 'backchannel') {
+        this.actions.fadeNavi(100);
+        this.naviSpeaking = false;
+        this.set('USER_SPEAKING');
+        return intent;
+      }
       this.set('USER_TAKEOVER');
       this.actions.fadeNavi(TAKEOVER_FADE_MS);
       this.actions.discardPendingChunks();
       this.actions.stopLipSync();
       this.actions.markInterrupted();
       this.naviSpeaking = false;
+      this.naviMode = 'normal';
       return intent;
     }
     this.set(this.naviSpeaking ? 'OVERLAP' : 'USER_SPEAKING');
@@ -83,15 +93,17 @@ export class FloorManager {
 
   naviTakeoverStarted(): void {
     this.naviSpeaking = true;
+    this.naviMode = 'interrupt';
     this.set('NAVI_TAKEOVER');
   }
 
   /** A soft interrupt yields immediately when the user keeps the floor. */
   userContinuedAfterNaviInterrupt(): boolean {
-    if (this._state !== 'NAVI_TAKEOVER' && this._state !== 'OVERLAP') return false;
+    if (this.naviMode !== 'interrupt' || !this.naviSpeaking) return false;
     this.actions.fadeNavi(100);
     this.actions.discardPendingChunks();
     this.naviSpeaking = false;
+    this.naviMode = 'normal';
     this.set('USER_SPEAKING');
     return true;
   }

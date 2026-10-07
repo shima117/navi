@@ -80,6 +80,14 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
     reportFailure: (svc) => health.reportFailure(svc),
     quiet: () => settings.current.quiet,
     sharing: () => capture.sourceId !== null && !capture.paused,
+    recentSystemAudio: async () => {
+      const response = await fetch(`${VOICE_SERVICE_URL}/audio/classify/recent?seconds=6`, {
+        signal: AbortSignal.timeout(1_500),
+      });
+      if (!response.ok) return null;
+      const result = (await response.json()) as { event?: { type: string; confidence: number; at: number } | null };
+      return result.event ?? null;
+    },
   });
 
   return { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice };

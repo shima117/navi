@@ -15,8 +15,8 @@ class AudioSource(str, Enum):
         if value:
             try:
                 return cls(value.upper())
-            except ValueError:
-                pass
+            except ValueError as exc:
+                raise ValueError(f"unknown audio source: {value!r}") from exc
         if default is not None:
             return default
         raise ValueError(f"unknown audio source: {value!r}")
