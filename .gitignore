@@ -6,3 +6,4 @@ dist-electron/
 __pycache__/
 *.sqlite
 *.sqlite-journal
+.claude/worktrees/
