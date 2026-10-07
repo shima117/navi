@@ -76,3 +76,32 @@ footer { border-top: 1px solid var(--line); }
 .game-row button.active { border-color: var(--share); }
 .game-panel { overflow: auto; height: 100%; }
 .game-panel > .empty { padding: 20px; }
+
+/* ---- Diagnostics tab (PR-10 hardening) ---- */
+.diag section { margin: 18px 0; }
+.diag h3 { margin: 0 0 8px; font-size: 15px; }
+.diag p { margin: 6px 0; }
+.diag-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.diag-head h2 { margin: 0 auto 0 0; }
+.diag-export-msg { max-width: 100%; overflow-wrap: anywhere; }
+.diag-table { border-collapse: collapse; font-size: 13px; min-width: 420px; }
+.diag-table th { text-align: left; color: var(--muted); font-weight: normal; border-bottom: 1px solid var(--line); padding: 4px 12px 4px 0; }
+.diag-table td { padding: 4px 12px 4px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.diag-errors td:last-child { overflow-wrap: anywhere; }
+.diag-ok { color: var(--ok); }
+.diag-bad { color: var(--accent); }
+.diag-warn { color: var(--warn); }
+.diag-muted { color: var(--muted); }
+.diag-reasons { margin: 4px 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.diag-proc { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 10px 0; max-width: 760px; }
+.diag-proc-head { display: flex; align-items: center; gap: 10px; }
+.diag-proc-head strong { margin-right: auto; }
+.diag-proc-info { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.diag-proc-info code { overflow-wrap: anywhere; }
+.diag-proc details { margin-top: 8px; font-size: 13px; }
+.diag-proc summary { cursor: pointer; color: var(--muted); }
+.diag-stderr { max-height: 180px; overflow: auto; background: #0b0c10; border: 1px solid var(--line); border-radius: 4px; padding: 8px; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diag-proc-config .field { max-width: 520px; }
+.pill.diag-state-running, .pill.diag-state-external { color: var(--ok); border-color: var(--ok); }
+.pill.diag-state-backoff, .pill.diag-state-starting { color: var(--warn); border-color: var(--warn); }
+.pill.diag-state-failed { color: var(--accent); border-color: var(--accent); }

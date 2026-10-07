@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { AvatarTab } from './AvatarTab';
+import { DiagnosticsTab } from './DiagnosticsTab';
 import { FriendTab } from './FriendTab';
 import { GamesTab } from './GamesTab';
 import { MemoryTab } from './MemoryTab';
@@ -20,4 +21,5 @@ export const TABS: TabDef[] = [
   { id: 'memory', label: 'Memory', component: MemoryTab },
   { id: 'avatar', label: 'Avatar', component: AvatarTab },
   { id: 'settings', label: 'Settings', component: SettingsTab },
+  { id: 'diagnostics', label: '診断', component: DiagnosticsTab },
 ];

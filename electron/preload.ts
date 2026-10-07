@@ -1,3 +1,4 @@
+import type { DiagnosticsExportResult, DiagnosticsSnapshot } from '../src/core/telemetry/DiagnosticsReport';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC, type CaptureSource, type FriendPush, type NaviSettings, type VoiceServiceEvent } from './ipc';
 
@@ -58,6 +59,13 @@ const api = {
   settings: {
     get: (): Promise<NaviSettings> => ipcRenderer.invoke(IPC.settingsGet),
     set: (patch: Partial<NaviSettings>): Promise<NaviSettings> => ipcRenderer.invoke(IPC.settingsSet, patch),
+  },
+  diagnostics: {
+    get: (): Promise<DiagnosticsSnapshot> => ipcRenderer.invoke(IPC.diagnosticsGet),
+    /** Restart a supervised helper process; false if it is not configured. */
+    restartProcess: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC.diagnosticsRestartProcess, id),
+    /** Opens a save dialog in main and writes the snapshot there. */
+    export: (): Promise<DiagnosticsExportResult> => ipcRenderer.invoke(IPC.diagnosticsExport),
   },
 };
 

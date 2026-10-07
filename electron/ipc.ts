@@ -1,3 +1,5 @@
+import { DEFAULT_MANAGED_PROCESSES, type ManagedProcessesSettings } from '../src/core/supervisor/processSpecs';
+
 /** IPC channel names (design doc §17). Shared by main and preload. */
 export const IPC = {
   captureListSources: 'capture:listSources',
@@ -39,6 +41,13 @@ export const IPC = {
 
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
+
+  /** PR-10 Diagnostics tab: health, processes, latency, errors, resources. */
+  diagnosticsGet: 'diagnostics:get',
+  /** Restart one supervised helper process by id. */
+  diagnosticsRestartProcess: 'diagnostics:restartProcess',
+  /** Save a diagnostics JSON through a save dialog. */
+  diagnosticsExport: 'diagnostics:export',
 } as const;
 
 export interface CaptureSource {
@@ -59,6 +68,12 @@ export interface NaviSettings {
   /** Persist conversation memory across sessions. */
   persistMemory: boolean;
   micDeviceId: string | null;
+  /** Pick the resource mode from the situation (game / share / idle); off = resourceMode. */
+  autoResourceMode: boolean;
+  /** Also append local metrics (numbers only, no text or images) to userData/logs. */
+  telemetryToFile: boolean;
+  /** Helper processes NAVI starts and supervises. All off by default. */
+  managedProcesses: ManagedProcessesSettings;
 }
 
 export const DEFAULT_SETTINGS: NaviSettings = {
@@ -71,6 +86,9 @@ export const DEFAULT_SETTINGS: NaviSettings = {
   avatarClickThrough: true,
   persistMemory: false,
   micDeviceId: null,
+  autoResourceMode: true,
+  telemetryToFile: false,
+  managedProcesses: DEFAULT_MANAGED_PROCESSES,
 };
 
 export type FriendPush =
