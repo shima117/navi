@@ -12,6 +12,8 @@ import type { LipSyncKeyframe } from '../voice/LipSync';
 import type { ResourceMode } from '../resource/ResourceGovernor';
 import type { AudioSource } from '../voice/AudioSource';
 import type { FloorState } from '../voice/FloorManager';
+import type { TaskSnapshot } from '../tasks/TaskSnapshotPublisher';
+import type { OperationReport } from '../tasks/OperationReport';
 
 /** Every event in the system (design doc §16). Modules talk only through these. */
 export interface NaviEvents {
@@ -35,7 +37,8 @@ export interface NaviEvents {
   'plugin.context': PluginContext;
 
   'friend.response': CompanionResponse;
-  'friend.speak': { text: string; cue: PerformanceCue };
+  'friend.speak': { text: string; cue: PerformanceCue; presentation?: 'voice' | 'text' | 'both'; textMode?: 'ANSWER' | 'TASK_STATUS' };
+  'task.snapshot': { snapshot: TaskSnapshot; report?: OperationReport };
   'friend.silent': { reason: string };
 
   'avatar.performance': PerformanceCue;

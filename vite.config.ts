@@ -16,6 +16,7 @@ export default defineConfig({
       input: {
         index: page('index'),
         avatar: page('avatar'),
+        textOverlay: page('text-overlay'),
       },
     },
   },

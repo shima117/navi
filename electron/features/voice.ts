@@ -72,8 +72,16 @@ export const voiceFeature: Feature = {
       if (service === 'tts' && ok) void warmBackchannels();
     });
 
-    bus.on('friend.speak', ({ text, cue }) => {
+    bus.on('friend.speak', ({ text, cue, presentation, textMode }) => {
       windows.push({ type: 'transcript', role: 'navi', text, at: Date.now() });
+      windows.rememberAnswer(text);
+      if (presentation === 'text' || presentation === 'both') windows.showText(text, textMode ?? 'ANSWER');
+      if (presentation === 'text') {
+        generation++;
+        windows.push({ type: 'stopSpeech' });
+        windows.sendAvatar(IPC.avatarLipSync, null);
+        return;
+      }
       playbackText = text;
       void speakChunks(ctx, floor, director, text, cue.emotion, cue.intensity, ++generation, () => generation);
     });

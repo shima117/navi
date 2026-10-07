@@ -14,6 +14,7 @@ import { TarkovPlugin } from '../src/plugins/tarkov/TarkovPlugin';
 import { FrameBridge, type CaptureState } from './frameBridge';
 import type { SettingsStore } from './settings';
 import type { WindowManager } from './windows';
+import { TaskSnapshotPublisher, formatTaskSnapshots, type TaskSnapshot } from '../src/core/tasks/TaskSnapshotPublisher';
 
 export const VOICE_SERVICE_URL = 'http://127.0.0.1:17650';
 
@@ -33,6 +34,8 @@ export interface AppContext {
   frames: FrameBridge;
   /** Mutable so the voice feature can swap the TTS engine when settings change. */
   voice: { tts: TtsAdapter };
+  tasks: TaskSnapshotPublisher;
+  tasksOnPublish?: (snapshot: TaskSnapshot) => void;
 }
 
 export function createContext(settings: SettingsStore, windows: WindowManager): AppContext {
@@ -49,6 +52,9 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
   const capture: CaptureState = { sourceId: null, sourceName: null, kind: 'window', paused: false };
   const frames = new FrameBridge(windows, capture);
   const voice = { tts: new VoicevoxClient(s.speakerId) as TtsAdapter };
+  // Snapshot publication is bounded. Reading task state never waits on a worker.
+  let ctx: AppContext;
+  const tasks = new TaskSnapshotPublisher((snapshot) => ctx?.tasksOnPublish?.(snapshot));
 
   const health = new HealthMonitor(bus, {
     chat: () => ollama.ping(),
@@ -88,7 +94,13 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
       const result = (await response.json()) as { event?: { type: string; confidence: number; at: number } | null };
       return result.event ?? null;
     },
+    desktopText: {
+      visible: () => windows.textState.visible,
+      command: (command) => windows.textCommand(command),
+      taskStatus: () => formatTaskSnapshots(tasks.list()),
+    },
   });
 
-  return { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice };
+  ctx = { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice, tasks };
+  return ctx;
 }
