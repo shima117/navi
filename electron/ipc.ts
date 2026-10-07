@@ -11,6 +11,10 @@ export const IPC = {
   captureFrameRequest: 'capture:frameRequest',
   /** renderer → main: the requested frame. */
   captureFrameResponse: 'capture:frameResponse',
+  /** renderer → main: short OCR summary (≤300 chars) of a high-change frame. Never logged or stored. */
+  captureOcrSummary: 'capture:ocrSummary',
+  /** main → renderer: OCR settings / resource mode changed (OcrSettingsPush). */
+  captureOcrConfig: 'capture:ocrConfig',
 
   friendSubmitText: 'friend:submitText',
   friendGetState: 'friend:getState',
@@ -59,6 +63,10 @@ export interface NaviSettings {
   /** Persist conversation memory across sessions. */
   persistMemory: boolean;
   micDeviceId: string | null;
+  /** Read text on the shared screen (OCR, RAM only). */
+  ocrEnabled: boolean;
+  /** OCR is off in GAME_PRIORITY unless this is on (§4: protect game FPS). */
+  ocrInGamePriority: boolean;
 }
 
 export const DEFAULT_SETTINGS: NaviSettings = {
@@ -71,7 +79,12 @@ export const DEFAULT_SETTINGS: NaviSettings = {
   avatarClickThrough: true,
   persistMemory: false,
   micDeviceId: null,
+  ocrEnabled: true,
+  ocrInGamePriority: false,
 };
+
+/** What the renderer's OCR scheduler needs from settings. */
+export type OcrSettingsPush = Pick<NaviSettings, 'ocrEnabled' | 'ocrInGamePriority' | 'resourceMode'>;
 
 export type FriendPush =
   | { type: 'transcript'; role: 'user' | 'navi'; text: string; at: number; interrupted?: boolean }

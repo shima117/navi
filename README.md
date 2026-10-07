@@ -40,7 +40,7 @@ src/core/            Friend Core — ゲーム固有ロジックを置かない
   orchestrator/      FriendOrchestrator — 発言の唯一の決定点 (§6.1)
   conversation/      人格プロンプト, JSON 応答パーサ, 話量の強制 (§8.3), 会話状態/トピック疲労
   initiative/        自発発言スコアリング (§10.1) — 定期発言しない
-  screen/            dHash フレーム差分, 20 秒リングバッファ, 「これ/今の」検出, VisionService
+  screen/            dHash フレーム差分, 4x4 領域ハッシュ (変化した領域: 右下 等), 20 秒リングバッファ, 「これ/今の」検出, OCR 値札/セール解析, VisionService
   ai/                OllamaClient, ModelRouter, HealthMonitor (再接続 1,2,5,10,30 秒)
   voice/             VOICEVOX クライアント, AudioQuery → 口パク, barge-in 状態機械
   resource/          ResourceGovernor (GAME_PRIORITY / BALANCED / DESKTOP_CHAT)
@@ -77,7 +77,7 @@ npm run typecheck
 | PR | 内容 | 状態 |
 |---|---|---|
 | PR-01 | FriendShell, PluginHost, Generic モード | ✅ |
-| PR-02 | 継続画面共有, ソース選択, 一時停止, リングバッファ, フレーム差分 | ✅ (OCR は未実装) |
+| PR-02 | 継続画面共有, ソース選択, 一時停止, リングバッファ, フレーム差分, 4x4 領域ハッシュ, OCR | ✅ OCR は tesseract.js (jpn+eng, 同梱データ・CDN 不使用) をレンダラの Web Worker で、変化の大きいフレームだけ実行 (GAME_PRIORITY では既定 OFF)。main へは 300 文字以内の要約のみ。文字はログ/ディスクに出さない |
 | PR-03 | 音声サービス, VAD, faster-whisper, barge-in, VOICEVOX | ✅ |
 | PR-04 | OllamaClient, ModelRouter, Orchestrator, 応答スキーマ, 話量強制, ヘルスチェック | ✅ |
 | PR-05 | Vision (qwen3-vl), 参照語検出, 「今の」バッファ取得, 8B エスカレーション | ✅ |

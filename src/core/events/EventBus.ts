@@ -7,6 +7,7 @@ import type {
   UserUtterance,
 } from '../types';
 import type { FrameSummary } from '../screen/FrameSummary';
+import type { ScreenOcr } from '../screen/OcrAnalysis';
 import type { LipSyncKeyframe } from '../voice/LipSync';
 
 /** Every event in the system (design doc §16). Modules talk only through these. */
@@ -14,6 +15,8 @@ export interface NaviEvents {
   'screen.frame': FrameSummary;
   'screen.changed': FrameSummary;
   'screen.observed': ScreenObservation;
+  /** Short OCR summary of a high-change frame (RAM only; never log or persist the text, §20). */
+  'screen.ocr': ScreenOcr;
 
   'voice.speech_started': { at: number };
   'voice.transcript': UserUtterance;

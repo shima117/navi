@@ -37,12 +37,22 @@ export class FrameRingBuffer<TImage = Uint8Array> {
 
   /**
    * Pick a representative frame for "今の何？": the frame with the largest
-   * change in the 2–6 s window, falling back to the newest frame.
+   * change in the 2–6 s window, falling back to the newest frame. A local
+   * change (high scene score, small whole-frame change) counts too.
    */
   representative(now: number, fromMsAgo = 6_000, toMsAgo = 2_000): BufferedFrame<TImage> | undefined {
     const window = this.range(now, fromMsAgo, toMsAgo);
     if (window.length === 0) return this.latest();
-    return window.reduce((best, f) => (f.change > best.change ? f : best));
+    const score = (f: BufferedFrame<TImage>) => Math.max(f.change, f.sceneScore ?? 0);
+    return window.reduce((best, f) => (score(f) > score(best) ? f : best));
+  }
+
+  /** Attach late analysis results (OCR finishes after the frame was buffered). */
+  annotate(frameId: string, patch: Pick<BufferedFrame<TImage>, 'ocrSummary'>): boolean {
+    const frame = this.frames.find((f) => f.frameId === frameId);
+    if (!frame) return false;
+    Object.assign(frame, patch);
+    return true;
   }
 
   /** Drop everything (share stopped or source switched). */
