@@ -52,6 +52,8 @@ export function isQuestion(sentence: string): boolean {
 }
 
 export interface EnforceOptions {
+  maxSentences?: number;
+  maxChars?: number;
   /** Drop a trailing question when there is other content (used when Navi has been asking too much). */
   suppressTrailingQuestion?: boolean;
 }
@@ -62,7 +64,8 @@ export function enforceStyle(text: string, opts: EnforceOptions = {}): StyleResu
   if (opts.suppressTrailingQuestion && sentences.length > 1 && isQuestion(sentences[sentences.length - 1]!)) {
     sentences = sentences.slice(0, -1);
   }
-  if (sentences.length > MAX_SENTENCES) sentences = sentences.slice(0, MAX_SENTENCES);
+  const maxSentences = opts.maxSentences ?? MAX_SENTENCES;
+  if (sentences.length > maxSentences) sentences = sentences.slice(0, maxSentences);
 
   // Japanese sentences are joined without spaces.
   const joined = sentences.join('');
@@ -70,7 +73,7 @@ export function enforceStyle(text: string, opts: EnforceOptions = {}): StyleResu
   return {
     text: joined,
     sentences,
-    needsRegenerate: [...joined].length > MAX_CHARS,
+    needsRegenerate: [...joined].length > (opts.maxChars ?? MAX_CHARS),
     endsWithQuestion: last !== undefined && isQuestion(last),
   };
 }

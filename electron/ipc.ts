@@ -1,6 +1,7 @@
 import { DEFAULT_MANAGED_PROCESSES, type ManagedProcessesSettings } from '../src/core/supervisor/processSpecs';
 import type { AudioSource } from '../src/core/voice/AudioSource';
 import type { FloorState } from '../src/core/voice/FloorManager';
+import { DEFAULT_DESKTOP_TEXT, type DesktopTextSettings } from '../src/core/desktopText/DesktopText';
 
 /** IPC channel names (design doc §17). Shared by main and preload. */
 export const IPC = {
@@ -49,6 +50,14 @@ export const IPC = {
   avatarSetClickThrough: 'avatar:setClickThrough',
   avatarPerformance: 'avatar:performance',
   avatarLipSync: 'avatar:lipsync',
+  textGetState: 'text:getState',
+  textShow: 'text:show',
+  textCommand: 'text:command',
+  textMoved: 'text:moved',
+  textLayout: 'text:layout',
+  textState: 'text:state',
+  tasksList: 'tasks:list',
+  taskSnapshot: 'tasks:snapshot',
 
   pluginList: 'plugin:list',
   pluginActivate: 'plugin:activate',
@@ -110,6 +119,7 @@ export interface NaviSettings {
   /** OCR is off in GAME_PRIORITY unless this is on (§4: protect game FPS). */
   ocrInGamePriority: boolean;
   audio: AudioSettings;
+  desktopText: DesktopTextSettings;
 }
 
 export interface AudioSettings {
@@ -174,6 +184,7 @@ export const DEFAULT_SETTINGS: NaviSettings = {
   ocrEnabled: true,
   ocrInGamePriority: false,
   audio: { ...DEFAULT_AUDIO_SETTINGS },
+  desktopText: { ...DEFAULT_DESKTOP_TEXT },
 };
 
 export interface AudioDevice {

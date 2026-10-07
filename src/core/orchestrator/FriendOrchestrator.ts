@@ -19,6 +19,7 @@ import { formatPrice, priceSignature, type ScreenOcr } from '../screen/OcrAnalys
 import { RecentRegionChanges } from '../screen/RegionHash';
 import { errorMessage } from '../telemetry/redact';
 import type { CompanionResponse, PluginContext, PluginEvent, ScreenObservation, UserUtterance } from '../types';
+import { detectTextIntent, type OverlayCommand } from '../desktopText/DesktopText';
 
 export interface OrchestratorDeps {
   bus: EventBus;
@@ -40,6 +41,11 @@ export interface OrchestratorDeps {
   sharing?: () => boolean;
   /** A conservative classifier over recent SYSTEM PCM, queried only on demand. */
   recentSystemAudio?: () => Promise<{ type: string; confidence: number; at: number } | null>;
+  desktopText?: {
+    visible(): boolean;
+    command(command: OverlayCommand): void;
+    taskStatus(): string;
+  };
 }
 
 interface TurnInput {
@@ -54,6 +60,7 @@ interface TurnInput {
   /** The observation is only OCR'd text: nothing beyond it may be claimed. */
   observationVia?: 'ocr';
   audioEvent?: { type: string; confidence: number; at: number } | null;
+  presentation?: 'voice' | 'text' | 'both';
 }
 
 const FOCUS_HOLD_MS = 20_000;
@@ -134,16 +141,31 @@ export class FriendOrchestrator {
     this.inflight = abort;
 
     this.conversation.addUserTurn(u.text, u.at);
+    const textIntent = this.deps.desktopText ? detectTextIntent(u.text, this.deps.desktopText.visible()) : { kind: 'none' as const };
+    if (textIntent.kind === 'command') {
+      this.deps.desktopText!.command(textIntent.command);
+      this.inflight = null;
+      return { ...SILENT_RESPONSE };
+    }
+    const presentation = textIntent.kind === 'answer' ? (textIntent.readAloud ? 'both' : 'text') : 'voice';
+    const query = textIntent.kind === 'answer' ? textIntent.query : u.text;
+    if (this.deps.desktopText && /^(?:進捗|作業状況|今どこまで|あとどれくらい)(?:は|を|教えて|見せて)?[？?]?$/.test(query)) {
+      const res = { ...SILENT_RESPONSE, speak: true, text: this.deps.desktopText.taskStatus() };
+      this.commit(res, presentation, 'TASK_STATUS');
+      this.inflight = null;
+      return res;
+    }
 
-    const ref = detectScreenReference(u.text);
-    const soundQuestion = /(?:今|さっき|直前).{0,8}(?:音|物音)|(?:音|物音).{0,8}(?:何|なに)/.test(u.text);
+    // "画面に出して" selects an output surface; it is not a screenshot request.
+    const ref = detectScreenReference(query);
+    const soundQuestion = /(?:今|さっき|直前).{0,8}(?:音|物音)|(?:音|物音).{0,8}(?:何|なに)/.test(query);
     const recentAudio = soundQuestion
       ? this.deps.recentSystemAudio?.().catch(() => null) ?? Promise.resolve(null)
       : Promise.resolve(null);
     let observation: ScreenObservation | null = null;
     let screenUnavailable = false;
     if (ref !== 'none') {
-      observation = await this.look(ref, u.text, true, abort.signal);
+      observation = await this.look(ref, query, true, abort.signal);
       screenUnavailable = observation === null;
     }
     if (seq !== this.turnSeq) return { ...SILENT_RESPONSE };
@@ -154,7 +176,7 @@ export class FriendOrchestrator {
     const pluginContext = observation ? await this.deps.plugins.enrich(observation) : null;
     return this.runTurn(
       seq,
-      { kind: 'reply', userText: u.text, observation, screenUnavailable, pluginContext, audioEvent },
+      { kind: 'reply', userText: u.text, observation, screenUnavailable, pluginContext, audioEvent, presentation },
       abort.signal,
     );
   }
@@ -403,7 +425,7 @@ export class FriendOrchestrator {
 
       res = await this.applyStyle(res, input, signal);
       if (seq !== this.turnSeq) return { ...SILENT_RESPONSE };
-      this.commit(res);
+      this.commit(res, input.presentation);
       return res;
     } catch (err) {
       if (signal.aborted || seq !== this.turnSeq) return { ...SILENT_RESPONSE };
@@ -420,7 +442,10 @@ export class FriendOrchestrator {
   private async applyStyle(res: CompanionResponse, input: TurnInput, signal: AbortSignal): Promise<CompanionResponse> {
     if (!res.speak) return res;
     const suppressQuestion = this.conversation.questionRate > 0.35;
-    let styled = enforceStyle(res.text, { suppressTrailingQuestion: suppressQuestion });
+    let styled = enforceStyle(res.text, {
+      suppressTrailingQuestion: suppressQuestion,
+      ...(input.presentation === 'text' ? { maxSentences: 40, maxChars: 4000 } : {}),
+    });
     if (styled.needsRegenerate) {
       const retry = await this.ask({ ...input }, signal, 'さっきの返答は長すぎた。1〜2文で、もっと短く。');
       const retryStyled = enforceStyle(retry.text, { suppressTrailingQuestion: suppressQuestion });
@@ -436,7 +461,7 @@ export class FriendOrchestrator {
     return { ...res, text: styled.text };
   }
 
-  private commit(res: CompanionResponse): void {
+  private commit(res: CompanionResponse, presentation?: 'voice' | 'text' | 'both', textMode?: 'ANSWER' | 'TASK_STATUS'): void {
     const { bus, memory } = this.deps;
     const now = this.now();
     bus.emit('friend.response', res);
@@ -453,7 +478,7 @@ export class FriendOrchestrator {
     this.conversation.addNaviTurn(res.text, now, styled.endsWithQuestion);
     const cue = { emotion: res.emotion, intensity: res.intensity, gaze: res.gaze, gesture: res.gesture };
     bus.emit('avatar.performance', cue);
-    bus.emit('friend.speak', { text: res.text, cue });
+    bus.emit('friend.speak', { text: res.text, cue, presentation, textMode });
   }
 
   private async ask(input: TurnInput, signal: AbortSignal, extraInstruction?: string): Promise<CompanionResponse> {
@@ -463,7 +488,7 @@ export class FriendOrchestrator {
       model,
       keepAlive,
       format: 'json',
-      options: { temperature: 0.8, num_predict: 300 },
+      options: { temperature: 0.8, num_predict: input.presentation === 'text' ? 1200 : 300 },
       signal,
       messages: await this.buildMessages(input, extraInstruction),
     });
@@ -528,6 +553,7 @@ export class FriendOrchestrator {
       );
     }
     if (extraInstruction) context.push(extraInstruction);
+    if (input.presentation === 'text') context.push('今回は声ではなくデスクトップの文字で返答する。必要な説明は省かなくてよいが、不要に長くしない。');
     messages.push({ role: 'system', content: context.join('\n') });
 
     for (const t of this.conversation.recentTurns(12)) {

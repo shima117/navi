@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AudioDevice, AudioRuntimeState, NaviSettings } from '../../../electron/ipc';
 import { OcrSettingsFields } from '../ocr/OcrSettingsFields';
 import { useNavi } from '../state/NaviContext';
+import { TextSettingsFields } from '../desktopText/TextSettingsFields';
 
 export function SettingsTab() {
   const { settings, updateSettings, health, audioOutput } = useNavi();
@@ -162,6 +163,7 @@ export function SettingsTab() {
         {audioMessage && <p className="hint">{audioMessage}</p>}
       </section>
       <OcrSettingsFields />
+      <TextSettingsFields />
       <h3>サービス状態</h3>
       <ul className="health">
         {(['chat', 'vision', 'stt', 'tts'] as const).map((s) => (

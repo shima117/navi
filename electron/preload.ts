@@ -14,6 +14,8 @@ import {
 } from './ipc';
 import type { MemoryClearScope } from './ipc';
 import type { MemoryItem, MemoryStats, MemoryTier } from '../src/core/memory/MemoryStore';
+import type { DesktopTextState, OverlayCommand, TextMode } from '../src/core/desktopText/DesktopText';
+import type { TaskSnapshot } from '../src/core/tasks/TaskSnapshotPublisher';
 
 // Bundled with esbuild (sandboxed preloads cannot require local modules).
 
@@ -27,6 +29,18 @@ type LipSyncFrames = Array<{ t: number; open: number; form: number }>;
 
 /** The only API the renderer gets (design doc §17): no Node access, no keys. */
 const api = {
+  desktopText: {
+    getState: (): Promise<DesktopTextState> => ipcRenderer.invoke(IPC.textGetState),
+    show: (text: string, mode: TextMode = 'MEMO'): Promise<void> => ipcRenderer.invoke(IPC.textShow, text, mode),
+    command: (command: OverlayCommand): Promise<void> => ipcRenderer.invoke(IPC.textCommand, command),
+    onState: (cb: (state: DesktopTextState) => void) => subscribe(IPC.textState, cb),
+    moved: () => ipcRenderer.send(IPC.textMoved),
+    layout: (revision: number, pages: number) => ipcRenderer.send(IPC.textLayout, revision, pages),
+  },
+  tasks: {
+    list: (): Promise<TaskSnapshot[]> => ipcRenderer.invoke(IPC.tasksList),
+    onSnapshot: (cb: (s: TaskSnapshot) => void) => subscribe(IPC.taskSnapshot, cb),
+  },
   capture: {
     listSources: (): Promise<CaptureSource[]> => ipcRenderer.invoke(IPC.captureListSources),
     start: (sourceId: string, sourceName: string, kind: 'screen' | 'window'): Promise<void> =>
@@ -103,4 +117,13 @@ const api = {
 
 export type NaviApi = typeof api;
 
-contextBridge.exposeInMainWorld('navi', api);
+// An independent text renderer cannot invoke shell/settings/memory/capture APIs.
+contextBridge.exposeInMainWorld('navi', process.argv.includes('--navi-text-overlay') ? {
+  desktopText: {
+    getState: api.desktopText.getState,
+    command: api.desktopText.command,
+    onState: api.desktopText.onState,
+    moved: api.desktopText.moved,
+    layout: api.desktopText.layout,
+  },
+} : api);

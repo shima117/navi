@@ -2,6 +2,7 @@ import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_AUDIO_SETTINGS, DEFAULT_SETTINGS, type NaviSettings } from './ipc';
+import { normalizeTextSettings } from '../src/core/desktopText/DesktopText';
 
 type Listener = (next: NaviSettings, prev: NaviSettings) => void;
 
@@ -22,6 +23,7 @@ export class SettingsStore {
     try {
       const raw = JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<NaviSettings>;
       this.value = { ...DEFAULT_SETTINGS, ...raw, audio: { ...DEFAULT_AUDIO_SETTINGS, ...(raw.audio ?? {}) } };
+      this.value.desktopText = normalizeTextSettings(raw.desktopText);
       // PR-11 migration: the old top-level mic setting becomes the direct USER_MIC input.
       if (!raw.audio?.userMicDeviceId && raw.micDeviceId) this.value.audio.userMicDeviceId = raw.micDeviceId;
       // Migrate the old generated default; explicit custom names remain untouched.
@@ -34,6 +36,7 @@ export class SettingsStore {
   async patch(patch: Partial<NaviSettings>): Promise<NaviSettings> {
     const prev = this.value;
     this.value = { ...prev, ...patch, audio: patch.audio ? { ...prev.audio, ...patch.audio } : prev.audio };
+    this.value.desktopText = normalizeTextSettings({ ...prev.desktopText, ...patch.desktopText });
     for (const l of this.listeners) {
       try {
         l(this.value, prev);

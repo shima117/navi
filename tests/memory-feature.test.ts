@@ -6,7 +6,7 @@ import type { AppContext } from '../electron/context';
 import { DEFAULT_SETTINGS, IPC, type NaviSettings } from '../electron/ipc';
 import type { SettingsStore } from '../electron/settings';
 import { EventBus } from '../src/core/events/EventBus';
-import type { MemoryItem, MemoryStats } from '../src/core/memory/MemoryStore';
+import { isManagedMemoryStore, type MemoryItem, type MemoryStats } from '../src/core/memory/MemoryStore';
 import { T0 } from './memory-helpers';
 
 // Fake Electron main-process API: records IPC handlers and app events.
@@ -54,12 +54,15 @@ function fakeSettings(patch: Partial<NaviSettings> = {}) {
   };
 }
 
+const closeStores: Array<() => void> = [];
+
 async function boot(opts: { settings?: Partial<NaviSettings>; chat?: (req: unknown) => Promise<string> } = {}) {
   vi.resetModules();
   const mod = await import('../electron/features/memory');
   const settings = fakeSettings(opts.settings);
   const bus = new EventBus();
   const memory = mod.createMemoryStore(settings as unknown as SettingsStore);
+  if (isManagedMemoryStore(memory)) closeStores.push(() => memory.close());
   const ctx = {
     bus,
     settings,
@@ -91,6 +94,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Windows cannot delete a profile while its SQLite connection is still open.
+  for (const close of closeStores.splice(0)) close();
   rmSync(electron.userData, { recursive: true, force: true });
   vi.restoreAllMocks();
 });

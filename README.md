@@ -2,6 +2,7 @@
 
 画面を共有しながら雑談できる、ローカルAIの友達アプリ。
 設計書: [`docs/design.md`](docs/design.md)
+追加再設計の進捗: [Personal Agent v3.2](docs/personal-agent-v3.2-status.md)
 
 Electron + React + TypeScript / Ollama / VOICEVOX / faster-whisper。すべて `127.0.0.1` で動作します。
 
@@ -43,6 +44,13 @@ npm start                            # build して起動
 指標はすべてローカルのみで、`指標をファイルにも記録する` をオンにした時だけ `userData/logs/telemetry.jsonl` (ローテーション) に数値だけを書きます。
 
 ## 構成
+
+デスクトップ文字表示: 「文字で見せて」で直前の返答を背景なしの別窓に表示。
+質問に「文字で出して」を付けると読み上げなし、「読み上げて」も付けると音声も出します。
+「進捗をテキストで出して」は最新のローカル状態から回答し、作業がなければそう伝えます。
+「次」「前」「消して」「文字を大きくして」「文字を固定して」に対応します。
+Settings の「デスクトップの文字表示」で見た目・位置・クリック透過を変更できます。
+バックグラウンドでのコード修正・PC操作 worker はまだ実装していません。
 
 ```
 electron/            main プロセス (ウィンドウ, IPC §17, サービス配線) と最小 preload
@@ -105,7 +113,8 @@ e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物�
 | PR-09 | Memory (SQLite) | ✅ `userData/navi.sqlite` (node:sqlite, FTS5 bigram 検索), セッション/長期の昇格, MemoryWriter, セッション要約, Memory タブ (検索・編集・削除・全消去)。発言ログは既定で保存しない (設定でオン, 保存期間つき)。開けない場合はインメモリに退避 |
 | PR-10 | Hardening | ✅ プロセス監視, 再接続, リソースモード自動切替 (+VRAM 表示), 診断タブ, ローカル専用テレメトリ, 受入テスト (B 沈黙 / C 割り込み / D キャラ評価 / G 障害 e2e) |
 | PR-11 | Full-Duplex Audio / Voicemeeter | 🟡 B2/B3/VAIO3分離, 差分復元, FloorManager, 双方向相槌/割り込み, SpeechChunk, EchoGuard, 音声設定UIまで実装。実マイク + Voicemeeter Potato + VAIO3での30分運用試験と、任意のVoicemod後段統合は未完了 |
+| v3.2 第1区切り | 独立文字窓 / TaskSnapshotPublisher | 🟡 文字表示・音声抑制・設定・Windows E2Eまで。Task DB / AgentService / worker / Protected Coreは次の区切り |
 
 PR-11のSYSTEM音声は、直前6秒のRAMバッファから「突発音の候補」を拾えます。音の種類（銃声など）はまだ判定しません。Voicemodの設定欄は接続実装まで無効です。
 
-既存の Tarkov Assistant / PuppetJS のコードはこのリポジトリに含まれていないため、PR-07 / PR-08 はそれらを取り込んだ後に進めます。
+既存の Tarkov Assistant / PuppetJS の参照コードは `references/` にあります。PR-07 / PR-08 の参照ロジック移植と実描画検証は未完了です。

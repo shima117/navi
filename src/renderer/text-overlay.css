@@ -1,0 +1,11 @@
+html, body { margin: 0; background: transparent; overflow: hidden; }
+body { padding: 16px; box-sizing: border-box; }
+#text, #page {
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: none;
+  color: rgba(255,255,255,.98);
+  -webkit-text-stroke: 1px rgba(0,0,0,.82);
+  paint-order: stroke fill;
+  text-shadow: 0 1px 2px rgba(0,0,0,.72), 0 0 4px rgba(0,0,0,.35);
+}
+#page { margin-top: 4px; font-size: .65em; }
+body.draggable { -webkit-app-region: drag; }
