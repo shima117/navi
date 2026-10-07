@@ -52,8 +52,13 @@ npm start                            # build して起動
 Settings の「デスクトップの文字表示」で見た目・位置・クリック透過を変更できます。
 「NAVIの環境を確認して」で固定ローカルサービスを、「プロジェクトを確認して」で選択したフォルダの package.json を裏で読み取り確認します。
 「作業」タブから状態・結果・個別停止・再開・全体中止を操作できます。「やめて」で裏作業を中止します。
+プロジェクトはフォルダ選択後、読む対象・行わない操作を確認して「この作業だけ許可」を押すと開始します。
+承認は対象と1作業に限定し15分で期限切れ、中止・再起動で失効します。作業タブで承認記録も見られます。
 作業は別プロセスで実行し、履歴は `userData/tasks.sqlite` にローカル保存します（選択したパス・確認結果を含みます）。
 アプリ再起動後の未完了作業は保留され、勝手には再実行しません。任意のコード修正・PC操作・インストール・Cloud 使用はまだ無効です。
+
+現行仕様は [docs/design.md](docs/design.md)、旧設計は [docs/archive/design-v1-tarkov.md](docs/archive/design-v1-tarkov.md) です。
+継続開発は `codex/v3-2-agent-foundation`（PR #3）と後継を基準にし、古いOverlayブランチで上書きしないでください。
 
 ```
 electron/            main プロセス (ウィンドウ, IPC §17, サービス配線) と最小 preload
@@ -118,6 +123,7 @@ e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物�
 | PR-11 | Full-Duplex Audio / Voicemeeter | 🟡 B2/B3/VAIO3分離, 差分復元, FloorManager, 双方向相槌/割り込み, SpeechChunk, EchoGuard, 音声設定UIまで実装。実マイク + Voicemeeter Potato + VAIO3での30分運用試験と、任意のVoicemod後段統合は未完了 |
 | v3.2 第1区切り | 独立文字窓 / TaskSnapshotPublisher | 🟡 文字表示・音声抑制・設定・Windows E2Eまで。Task DB / AgentService / worker / Protected Coreは次の区切り |
 | v3.2 第2区切り | AgentService / Task DB / 安全な確認作業 | 🟡 別プロセスの実確認・保存・停止・再開・失敗制御まで。任意の書き換え / Cloud承認 / Job Object / Protected Coreは未実装 |
+| v3.2 第3区切り | 現行設計整理 / PolicyEngine / 読み取り承認 | 🟡 読み取りTask境界の権限判定・対象限定承認・SQLite監査まで。Cloud用承認/予算、OS隔離、Protected Coreは未実装 |
 
 PR-11のSYSTEM音声は、直前6秒のRAMバッファから「突発音の候補」を拾えます。音の種類（銃声など）はまだ判定しません。Voicemodの設定欄は接続実装まで無効です。
 

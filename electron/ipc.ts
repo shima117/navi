@@ -62,6 +62,7 @@ export const IPC = {
   tasksInspectProject: 'tasks:inspectProject',
   tasksControl: 'tasks:control',
   tasksAgentState: 'tasks:agentState',
+  tasksApprovals: 'tasks:approvals',
 
   pluginList: 'plugin:list',
   pluginActivate: 'plugin:activate',

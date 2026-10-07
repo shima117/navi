@@ -1,4 +1,5 @@
 import type { OperationReport } from './OperationReport';
+import { PolicyEngine } from './PolicyEngine';
 import { TaskSnapshotPublisher } from './TaskSnapshotPublisher';
 import { TaskDatabase } from './TaskDatabase';
 import { checkTaskPolicy, CircuitBreaker, FailureBudget, ResourceLock } from './TaskSafety';
@@ -24,7 +25,7 @@ export class TaskEngine {
   private closing = false;
   private publisher: TaskSnapshotPublisher;
   constructor(private readonly db: TaskDatabase, private readonly runner: TaskRunner, private readonly send: (event: AgentEvent) => void,
-    private readonly now = Date.now, private readonly maxConcurrent = 2) {
+    private readonly now = Date.now, private readonly maxConcurrent = 2, private readonly policy = new PolicyEngine()) {
     this.publisher = new TaskSnapshotPublisher((snapshot) => send({ type: 'snapshot', snapshot, report: snapshot.lastReport }));
     for (const r of db.recover(now())) this.records.set(r.request.id, r);
   }
@@ -52,6 +53,7 @@ export class TaskEngine {
     for (const r of targets) {
       if (TASK_TERMINAL.has(r.snapshot.status)) continue;
       if (command === 'CANCEL') {
+        this.policy.cancel(r.request);
         r.snapshot.lastReport = undefined;
         this.change(r, 'CANCELLED', '中止しました。', 'cancelled');
         r.endedAt = this.now();
@@ -117,6 +119,8 @@ export class TaskEngine {
     this.circuits.set(r.request.kind, circuit);
     r.startedAt ??= this.now();
     while (!controller.signal.aborted && budget.canAttempt(this.now())) {
+      const decision = this.policy.authorize(r.request);
+      if (decision.state !== 'ALLOW') { this.wait(r, decision.reason); return; }
       if (!circuit.enter(this.now())) {
         this.wait(r, '同じ確認で失敗が続いているため、しばらく待っています。');
         return;

@@ -34,9 +34,11 @@ export const runLocalTask: TaskRunner = async (request, signal, progress) => {
       verification: { method: 'HTTP', result: passed === SERVICES.length ? 'PASS' : 'FAIL', evidence: `localhost HTTP checks: ${passed}/${SERVICES.length} 2xx` },
     };
   }
+  if (request.kind !== 'PROJECT_INSPECT') throw new Error('この操作は許可されていません。');
   signal.throwIfAborted();
   const root = await fs.realpath(request.projectRoot!);
   if (!path.isAbsolute(root)) throw new Error('Project directory must be absolute');
+  if (root !== request.projectRoot) throw new Error('選んだフォルダの場所が変わりました。もう一度選んでください。');
   progress('選んだフォルダを確認しています。', .2);
   const manifest = path.join(root, 'package.json');
   if ((await fs.lstat(manifest)).isSymbolicLink()) throw new Error('別の場所へのリンクは読みません。');
@@ -47,7 +49,17 @@ export const runLocalTask: TaskRunner = async (request, signal, progress) => {
     if (!stat.isFile() || stat.size > 1024 * 1024) throw new Error('package.json が大きすぎるか、通常のファイルではありません。');
     if ((await fs.realpath(manifest)) !== manifest) throw new Error('別の場所へのリンクは読みません。');
     signal.throwIfAborted();
-    const raw = await handle.readFile({ encoding: 'utf8' });
+    // Bound the read itself, not just the earlier stat (a file can grow during inspection).
+    const bytes = Buffer.alloc(1024 * 1024 + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      signal.throwIfAborted();
+      const { bytesRead } = await handle.read(bytes, length, bytes.length - length, length);
+      if (!bytesRead) break;
+      length += bytesRead;
+    }
+    if (length > 1024 * 1024) throw new Error('package.json が大きすぎます。');
+    const raw = bytes.subarray(0, length).toString('utf8');
     progress('package.json の形式を確認しています。', .7);
     let parsed: unknown;
     try { parsed = JSON.parse(raw); } catch { throw new Error('package.json の形式が正しくありません。'); }
@@ -55,7 +67,7 @@ export const runLocalTask: TaskRunner = async (request, signal, progress) => {
     signal.throwIfAborted();
     // Neither scripts nor dependencies are executed, and no contents leave the machine.
     const result: TaskOutcome = { state: 'SUCCESS', summary: '選んだプロジェクトの package.json を読めました。形式も確認できています。ファイルは変更していません。',
-      verification: { method: 'FILE', result: 'PASS', evidence: `package.json: regular file, ${stat.size} bytes, JSON object parsed` } };
+      verification: { method: 'FILE', result: 'PASS', evidence: `package.json: regular file, ${length} bytes, JSON object parsed` } };
     return result;
   } finally { await handle.close(); }
 };
