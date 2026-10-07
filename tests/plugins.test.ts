@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EventBus } from '../src/core/events/EventBus';
 import { PluginHost } from '../src/core/plugins/PluginHost';
-import { TarkovPlugin } from '../src/plugins/tarkov/TarkovPlugin';
 import type { GamePlugin } from '../src/core/plugins/GamePlugin';
 
 const broken: GamePlugin = {
@@ -25,11 +24,11 @@ const broken: GamePlugin = {
 };
 
 describe('PluginHost', () => {
-  it('auto-activates Tarkov from the window title and falls back to Generic', async () => {
+  it('auto-activates a registered plugin and falls back to Generic', async () => {
     const host = new PluginHost(new EventBus());
-    host.register(new TarkovPlugin());
-    expect((await host.onWindowShared({ sourceId: 'w1', title: 'EscapeFromTarkov', kind: 'window' }))?.id).toBe(
-      'escape-from-tarkov',
+    host.register({ ...broken, id: 'test-game', matchWindow: (w) => w.title === 'Test Game' ? 1 : 0, onFrame: async () => [], getPromptContext: async () => '' });
+    expect((await host.onWindowShared({ sourceId: 'w1', title: 'Test Game', kind: 'window' }))?.id).toBe(
+      'test-game',
     );
     expect(await host.onWindowShared({ sourceId: 'w2', title: 'Google Chrome', kind: 'window' })).toBeNull();
   });
@@ -43,21 +42,19 @@ describe('PluginHost', () => {
     await expect(host.resolveTool('x', {})).resolves.toEqual({ error: 'tool x failed' });
   });
 
-  it('Tarkov plugin turns a referent into item facts', async () => {
-    const plugin = new TarkovPlugin({
-      findItem: async (name) => ({ name, neededFor: ['ハイドアウト: 医務室 Lv2'], avg24hPrice: 45000 }),
-      activeTasks: async () => [],
-    });
-    const ctx = await plugin.enrichVision({
+  it('an empty host has no game-specific tools or facts', async () => {
+    const host = new PluginHost(new EventBus());
+    expect(host.list()).toEqual([]);
+    const ctx = await host.enrich({
       frameId: 'f',
       capturedAt: 0,
       sourceId: 's',
-      sourceName: 'EscapeFromTarkov',
+      sourceName: 'Test Game',
       summary: 'インベントリ',
       referent: 'Salewa',
       confidence: 0.8,
     });
-    expect(ctx.facts.join()).toContain('医務室');
-    expect(ctx.facts.join()).toContain('45,000');
+    expect(ctx).toBeNull();
+    expect(await host.resolveTool('item', {})).toEqual({ error: 'no active plugin' });
   });
 });

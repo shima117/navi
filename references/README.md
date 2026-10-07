@@ -2,20 +2,7 @@
 
 このディレクトリは、NAVI本体へ直接組み込むコードではなく、既存実装を移植・比較するための参照資料です。
 
-## Tarkov Assistant reference
-
-元データ: ユーザー提供 `タルコフ(1).zip`
-
-元ZIPには portable EXE、dist、Electron userData/cache、API cache、大量の生成物が含まれているため、それらをそのままリポジトリへ入れません。NAVIへ移植価値の高いソースだけを `references/tarkov-assistant/` に保存します。
-
-主な参照対象:
-- Tarkov API / Electron bridge
-- screenshot watcher
-- task progression / requirements
-- map registry
-- item utilities / shared types
-
-実装時はコピー前提にせず、`src/plugins/tarkov/` の GamePlugin 境界へ移植してください。
+Tarkov の参照コードとプラグインはユーザーの指示により削除済みです。必要な場合は Git 履歴から復元できます。
 
 ## PuppetJS reference
 

@@ -16,6 +16,7 @@ import type { MemoryClearScope } from './ipc';
 import type { MemoryItem, MemoryStats, MemoryTier } from '../src/core/memory/MemoryStore';
 import type { DesktopTextState, OverlayCommand, TextMode } from '../src/core/desktopText/DesktopText';
 import type { TaskSnapshot } from '../src/core/tasks/TaskSnapshotPublisher';
+import type { TaskControl } from '../src/core/tasks/TaskProtocol';
 
 // Bundled with esbuild (sandboxed preloads cannot require local modules).
 
@@ -40,6 +41,10 @@ const api = {
   tasks: {
     list: (): Promise<TaskSnapshot[]> => ipcRenderer.invoke(IPC.tasksList),
     onSnapshot: (cb: (s: TaskSnapshot) => void) => subscribe(IPC.taskSnapshot, cb),
+    startHealth: (idempotencyKey?: string): Promise<string> => ipcRenderer.invoke(IPC.tasksStartHealth, idempotencyKey),
+    inspectProject: (): Promise<string | null> => ipcRenderer.invoke(IPC.tasksInspectProject),
+    control: (command: TaskControl, id?: string): Promise<void> => ipcRenderer.invoke(IPC.tasksControl, command, id),
+    agentState: (): Promise<{ ready: boolean; pid: number | null; error: string | null }> => ipcRenderer.invoke(IPC.tasksAgentState),
   },
   capture: {
     listSources: (): Promise<CaptureSource[]> => ipcRenderer.invoke(IPC.captureListSources),

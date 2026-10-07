@@ -19,14 +19,47 @@
 - DONE は対応する OperationReport の検証方法・成功結果・証拠を必要とする。これは入力契約であり、独立 verifier / Protected Core の実装ではない。
 - ETA が未設定なら見積もれないと返す。作業が登録されていなければ作業なしと返す。架空の作業・進捗・ETA は作らない。
 
-TaskSnapshot は現時点では RAM のみ。AgentService / Task DB / CodingWorker はまだなく、
-自然文からコード修正や PC 操作を実行する機能は有効にしていない。
-信頼できる worker から EventBus の task.snapshot に { snapshot, report? } を渡す入口と、
-renderer への読み取り専用 tasks.list / onSnapshot は用意した。
+第1区切り時点では TaskSnapshot は RAM のみだった。以下の第2区切りで Task DB / AgentService を追加。
+自然文からコード変更や任意の PC 操作を実行する機能はまだ有効にしていない。
 
-## 検証
+## 第2区切り: 裏作業の実行・保存・停止
 
-最終確認: TypeScript テスト 345 / 345、追加 Windows Electron E2E 5 / 5、production build 成功。
+- 独立した Electron Utility Process で AgentService / TaskEngine を実行。会話側は依頼をキューに入れて即返答する。
+- SQLite WAL の `userData/tasks.sqlite` に TaskRegistry・idempotency key・試行回数・同一失敗回数・結果・状態監査を保存。DB 入出力は main の外。
+- 最初の実能力は `LOCAL_HEALTH`（固定 localhost 3サービスの HTTP 状態確認）と `PROJECT_INSPECT`（明示選択フォルダの package.json 形式確認）だけ。
+- プロジェクトの scripts / 依存コードを実行しない。再帰スキャンなし、1 MB 上限、リンク拒否、内容や環境変数をモデル・Cloud へ渡さない。
+- 「NAVIの環境を確認して」「プロジェクトを確認して」「今どう？」「あとどれくらい」「結果を見せて」にローカル規則で応答する。
+- 「やめて」「止めて」で裏作業を全中止。「それ一旦止めて」「続けて」は一時停止 / 再開。複数候補なら曖昧な対象を勝手に選ばず作業タブへ案内。
+- 作業タブで個別の停止・再開・全体中止、結果・Blocker・根拠を確認できる。並び順変更の制御 API も用意した。
+- Cancellation は AbortSignal で実処理へ伝搬。遅れて届く成功で中止を巻き戻さない。Utility Process 自体も終了時に2秒を上限に停止する。
+- Agent の異常終了は検出して保留。無限の自動再起動はしない。起動失敗・通知不正・保存失敗でも会話は継続する。
+- アプリ再起動後、未完了は勝手に再実行せず保留。中止・完了はそのまま復元する。
+- ResourceLock / FailureBudget（3試行・同一エラー2回・稼働30秒）/ CircuitBreaker を実処理で使用。一時停止中は時間予算を消費しない。
+- Worker は実チェックの検証結果を返す。証拠なし / 検証 FAIL の SUCCESS は DONE にできない。
+- HTTP 3接続が揃わなければ一部確認・保留。接続成功だけでモデル推論や実音声の正常動作まで確認したことにはしない。
+- ETA は同種の確認が3件以上成功した実績から作る。低確信度を表示し、履歴なしなら見積もらない。
+- 通常の進捗は worker 側で150ms集約。Realtime 側で二重に150ms待たせない。
+- 完了・保留の短い自然な報告は Conversation の発話空隙で行う。ユーザー発話中には読み上げない。
+- ユーザー指示により Tarkov のプラグインと参照コード6ファイルを削除。既存 Git 履歴から復元可能。別の元プロジェクトは変更なし。
+
+### 第2区切りの検証・権限レビュー
+
+TypeScript 全体テスト 358件成功。Windows 実 Electron の Agent 4件＋文字窓5件成功。型チェック・ビルド成功。
+実アプリで別PID、自然文受付の1.5秒未満応答、プロジェクト形式検証、中止の永続化・復帰時の保留、
+Agent の強制終了でも Avatar のフレーム継続を確認した。
+これは高負荷下の Avatar 60fps / マイク受入テストを完了した意味ではない。
+最終再確認の初回は描画継続試験の「500msで10フレーム超」だけが失敗（9フレーム）。
+再試行でも最初の描画コールバック到着までに500msを超え、従来の計数では0になった。
+この隔離試験は2回、各3つの描画コールバックが5秒以内に進む確認に分離した。フレームレート改善・性能受入は未完了。
+
+別プロセス化は権限サンドボックスではない。固定能力・IPC送信元確認・入力検証で入口を限定している。
+任意 Shell / Browser / FFmpeg / 子プロセスを実行する経路はまだ無い。
+Windows Job Object によるプロセス木制御と OS 権限制限を入れるまで、それらは有効にしない。
+Cloud / install / 自己更新 / Protected Core の専用承認・更新経路もまだ未実装で、実行禁止のまま。
+
+## 第1区切りの検証記録
+
+第1区切り時点: TypeScript テスト 345 / 345、追加 Windows Electron E2E 5 / 5、production build 成功。現在の確認件数は上の第2区切りを参照。
 
 - TypeScript 型チェックと production build。
 - 単体・結合: テキスト意図、ターンごとの音声抑制、明示した両出力、古い合成の無効化、
@@ -41,11 +74,9 @@ renderer への読み取り専用 tasks.list / onSnapshot は用意した。
 
 ## 次に実装する順序
 
-1. Task DB / TaskRegistry / AgentService を Electron main の外に置き、まず読み取り・診断など限定作業から実行する。
-2. FailureBudget / CircuitBreaker / ResourceLock / idempotency / 全体キャンセルと子プロセス停止を worker の前提条件にする。
-3. PolicyEngine / ApprovalStore / cloud budget / data classification。API 使用や install / privileged 操作は未承認のまま実行しない。
-4. 検証と実行を分けた OperationReport、安全な CodingWorker、ブラウザ隔離、差分 deploy / rollback。
-5. GPU lease / speech preemption / trace 指標 / 独立 supervisor と、負荷下の実機性能確認。
-6. Avatar / Tarkov の参照移植も別の作業区切りで続ける。現在の Avatar は仮描画、Tarkov は骨組みのまま。
+1. PolicyEngine / ApprovalStore / cloud budget / data classification を境界で強制する。API 使用や install / privileged 操作は未承認のまま実行しない。
+2. Windows Job Object 等のプロセス木制御、独立 verifier、安全な CodingWorker、ブラウザ隔離、差分 deploy / rollback。
+3. GPU lease / speech preemption / trace 指標 / 独立 supervisor と、負荷下の実機性能確認。
+4. Avatar の参照移植。現在は仮描画。Tarkov は対象外。
 
 音声と Avatar を止めないことが最優先。自動 PC 操作・自己更新・インストールを UI だけで完成扱いしない。

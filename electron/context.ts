@@ -10,11 +10,11 @@ import { FriendOrchestrator } from '../src/core/orchestrator/FriendOrchestrator'
 import { VisionService } from '../src/core/screen/VisionService';
 import { VoicevoxClient } from '../src/core/voice/VoicevoxClient';
 import type { TtsAdapter } from '../src/core/voice/TtsAdapter';
-import { TarkovPlugin } from '../src/plugins/tarkov/TarkovPlugin';
 import { FrameBridge, type CaptureState } from './frameBridge';
 import type { SettingsStore } from './settings';
 import type { WindowManager } from './windows';
 import { TaskSnapshotPublisher, formatTaskSnapshots, type TaskSnapshot } from '../src/core/tasks/TaskSnapshotPublisher';
+import { AgentClient } from './agent/AgentClient';
 
 export const VOICE_SERVICE_URL = 'http://127.0.0.1:17650';
 
@@ -36,6 +36,8 @@ export interface AppContext {
   voice: { tts: TtsAdapter };
   tasks: TaskSnapshotPublisher;
   tasksOnPublish?: (snapshot: TaskSnapshot) => void;
+  agent: AgentClient;
+  taskCommand?: (text: string, turnId: string) => string | null;
 }
 
 export function createContext(settings: SettingsStore, windows: WindowManager): AppContext {
@@ -47,14 +49,15 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
   // SQLite (userData/navi.sqlite) with an in-memory fallback; see features/memory.ts.
   const memory: MemoryStore = createMemoryStore(settings);
   const plugins = new PluginHost(bus);
-  plugins.register(new TarkovPlugin());
 
   const capture: CaptureState = { sourceId: null, sourceName: null, kind: 'window', paused: false };
   const frames = new FrameBridge(windows, capture);
   const voice = { tts: new VoicevoxClient(s.speakerId) as TtsAdapter };
   // Snapshot publication is bounded. Reading task state never waits on a worker.
   let ctx: AppContext;
-  const tasks = new TaskSnapshotPublisher((snapshot) => ctx?.tasksOnPublish?.(snapshot));
+  // Worker already coalesces normal events; do not add a second 150ms window.
+  const tasks = new TaskSnapshotPublisher((snapshot) => ctx?.tasksOnPublish?.(snapshot), 0);
+  const agent = new AgentClient(tasks, bus);
 
   const health = new HealthMonitor(bus, {
     chat: () => ollama.ping(),
@@ -99,8 +102,9 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
       command: (command) => windows.textCommand(command),
       taskStatus: () => formatTaskSnapshots(tasks.list()),
     },
+    taskCommand: (text, turnId) => ctx?.taskCommand?.(text, turnId) ?? null,
   });
 
-  ctx = { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice, tasks };
+  ctx = { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice, tasks, agent };
   return ctx;
 }

@@ -11,6 +11,7 @@ import { watchdogFeature } from './watchdog';
 import { diagnosticsFeature } from './diagnostics';
 import { audioFeature } from './audio';
 import { desktopTextFeature } from './desktopText';
+import { agentFeature } from './agent';
 
 /** Main-process features, set up in this order. */
 export const FEATURES: Feature[] = [
@@ -24,6 +25,7 @@ export const FEATURES: Feature[] = [
   voiceFeature,
   avatarFeature,
   desktopTextFeature,
+  agentFeature,
   pluginsFeature,
   // PR-10 hardening. resource must come after settings: its settings listener overrides the manual mode.
   resourceFeature,

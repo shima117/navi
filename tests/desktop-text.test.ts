@@ -23,7 +23,7 @@ function setup() {
     desktopText: { visible: () => true, command, taskStatus: () => '今は裏で動いている作業はありません。' },
   });
   const say = (text: string) => orch.handleUtterance({ id: text, source: 'text', at: 1, text });
-  return { chat, replies, command, speak, say, observe };
+  return { chat, replies, command, speak, say, observe, orch, bus };
 }
 
 describe('desktop text routing', () => {
@@ -78,5 +78,21 @@ describe('desktop text routing', () => {
     await s.say('答えを画面に出して');
     expect(s.observe).not.toHaveBeenCalled();
     expect(s.speak.mock.calls[0]![0].presentation).toBe('text');
+  });
+  it('defers worker completion during user speech and reports verified success without a model call', () => {
+    const s = setup();
+    const snapshot: import('../src/core/tasks/TaskSnapshotPublisher').TaskSnapshot = {
+      id: 'a', title: '環境確認', status: 'DONE', currentAction: '確認済み', phase: 'complete',
+      progress: 1, eta: null, lastUpdateAt: 2,
+      lastReport: { taskId: 'a', action: 'check', state: 'SUCCESS', summary: '確認済み',
+        verified: true, verification: { method: 'HTTP', result: 'PASS', evidence: 'HTTP 200' }, timestamp: 2 },
+    };
+    s.bus.emit('voice.speech_started', { at: 1, source: 'USER_MIC' });
+    expect(s.orch.reportTask(snapshot)).toBe(false);
+    expect(s.speak).not.toHaveBeenCalled();
+    s.bus.emit('voice.speech_ended', { at: 2, source: 'USER_MIC' });
+    expect(s.orch.reportTask(snapshot)).toBe(true);
+    expect(s.speak.mock.calls[0]![0].text).toContain('確認も通っています');
+    expect(s.chat.calls).toHaveLength(0);
   });
 });

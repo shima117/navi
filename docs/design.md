@@ -1,5 +1,7 @@
 # NAVI Friend System — 完成版設計書
 
+> 原設計の記録です。現在は Personal Agent v3.2 を優先します。Tarkov プラグインとその移植計画はユーザー指示により廃止しました。以下に残る記述は現在の実装要件ではありません。
+
 Version: 1.0 / 2026-10-07  
 Target: Windows 10/11, Electron + React + TypeScript, Local-first AI  
 Primary GPU assumption: NVIDIA RTX 4070 SUPER 12GB
