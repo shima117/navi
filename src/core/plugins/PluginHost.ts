@@ -80,6 +80,18 @@ export class PluginHost {
     return this.safe(p, () => p.resolveTool(name, args), { error: `tool ${name} failed` });
   }
 
+  /** Route a call from a plugin's UI. Errors are returned, not thrown, so the UI never crashes main. */
+  async invokeUi(pluginId: string, method: string, args: unknown): Promise<unknown> {
+    const p = this.plugins.get(pluginId);
+    if (!p?.handleUiRequest) return { error: `plugin ${pluginId} has no UI handler` };
+    try {
+      return await p.handleUiRequest(method, args);
+    } catch (err) {
+      console.error(`[PluginHost] plugin "${pluginId}" UI request "${method}" failed:`, err);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   private async switchTo(next: GamePlugin | null, now: number): Promise<void> {
     if (next === this.active) return;
     const prev = this.active;

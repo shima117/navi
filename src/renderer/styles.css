@@ -69,3 +69,10 @@ footer { border-top: 1px solid var(--line); }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; max-width: 360px; font-size: 13px; color: var(--muted); }
 .health li.ok { color: var(--ok); }
 .health li.bad { color: var(--accent); }
+
+.games { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
+.games aside { border-right: 1px solid var(--line); }
+.game-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.game-row button.active { border-color: var(--share); }
+.game-panel { overflow: auto; height: 100%; }
+.game-panel > .empty { padding: 20px; }

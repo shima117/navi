@@ -4,6 +4,7 @@ export const IPC = {
   captureStart: 'capture:start',
   captureStop: 'capture:stop',
   captureGetState: 'capture:getState',
+  captureSetPaused: 'capture:setPaused',
   /** renderer → main: per-frame summary (no pixels). */
   captureFrameSummary: 'capture:frameSummary',
   /** main → renderer: please send a frame for Vision. */
@@ -33,6 +34,8 @@ export const IPC = {
   pluginList: 'plugin:list',
   pluginActivate: 'plugin:activate',
   pluginGetState: 'plugin:getState',
+  /** Plugin-specific UI calls, routed to GamePlugin.handleUiRequest. */
+  pluginInvoke: 'plugin:invoke',
 
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',

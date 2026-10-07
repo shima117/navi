@@ -33,4 +33,9 @@ export interface GamePlugin {
   resolveTool(name: string, args: unknown): Promise<unknown>;
   getPromptContext(): Promise<string>;
   onSessionEnd(): Promise<void>;
+  /**
+   * Requests from the plugin's own UI (Games tab), e.g. task progress edits.
+   * Works whether or not the plugin is the active one.
+   */
+  handleUiRequest?(method: string, args: unknown): Promise<unknown>;
 }

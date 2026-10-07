@@ -1,0 +1,83 @@
+import { EventBus } from '../src/core/events/EventBus';
+import { OllamaClient } from '../src/core/ai/OllamaClient';
+import { ModelRouter } from '../src/core/ai/ModelRouter';
+import { HealthMonitor } from '../src/core/ai/HealthMonitor';
+import { ResourceGovernor } from '../src/core/resource/ResourceGovernor';
+import { InMemoryMemoryStore, type MemoryStore } from '../src/core/memory/MemoryStore';
+import { PluginHost } from '../src/core/plugins/PluginHost';
+import { FriendOrchestrator } from '../src/core/orchestrator/FriendOrchestrator';
+import { VisionService } from '../src/core/screen/VisionService';
+import { VoicevoxClient, type TtsAdapter } from '../src/core/voice/VoicevoxClient';
+import { TarkovPlugin } from '../src/plugins/tarkov/TarkovPlugin';
+import { FrameBridge, type CaptureState } from './frameBridge';
+import type { SettingsStore } from './settings';
+import type { WindowManager } from './windows';
+
+export const VOICE_SERVICE_URL = 'http://127.0.0.1:17650';
+
+/** Everything a Feature may use. Built once at startup. */
+export interface AppContext {
+  bus: EventBus;
+  settings: SettingsStore;
+  windows: WindowManager;
+  governor: ResourceGovernor;
+  router: ModelRouter;
+  ollama: OllamaClient;
+  memory: MemoryStore;
+  plugins: PluginHost;
+  health: HealthMonitor;
+  orchestrator: FriendOrchestrator;
+  capture: CaptureState;
+  frames: FrameBridge;
+  /** Mutable so the voice feature can swap the TTS engine when settings change. */
+  voice: { tts: TtsAdapter };
+}
+
+export function createContext(settings: SettingsStore, windows: WindowManager): AppContext {
+  const bus = new EventBus();
+  const s = settings.current;
+  const governor = new ResourceGovernor(s.resourceMode);
+  const router = new ModelRouter(governor);
+  const ollama = new OllamaClient();
+  const memory: MemoryStore = new InMemoryMemoryStore();
+  const plugins = new PluginHost(bus);
+  plugins.register(new TarkovPlugin());
+
+  const capture: CaptureState = { sourceId: null, sourceName: null, kind: 'window', paused: false };
+  const frames = new FrameBridge(windows, capture);
+  const voice = { tts: new VoicevoxClient(s.speakerId) as TtsAdapter };
+
+  const health = new HealthMonitor(bus, {
+    chat: () => ollama.ping(),
+    // Vision runs on the same Ollama instance.
+    vision: () => ollama.ping(),
+    tts: () => voice.tts.ping(),
+    stt: async () => {
+      try {
+        return (await fetch(`${VOICE_SERVICE_URL}/health`)).ok;
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  const orchestrator = new FriendOrchestrator({
+    bus,
+    ollama,
+    router,
+    memory,
+    plugins,
+    vision: new VisionService(ollama, router, governor, frames),
+    persona: {
+      get userName() {
+        return settings.current.userName;
+      },
+    },
+    isHealthy: (svc) => health.isHealthy(svc),
+    reportFailure: (svc) => health.reportFailure(svc),
+    quiet: () => settings.current.quiet,
+    sharing: () => capture.sourceId !== null && !capture.paused,
+  });
+
+  return { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice };
+}
