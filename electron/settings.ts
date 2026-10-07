@@ -22,6 +22,8 @@ export class SettingsStore {
     try {
       const raw = JSON.parse(await fs.readFile(this.file, 'utf8')) as Partial<NaviSettings>;
       this.value = { ...DEFAULT_SETTINGS, ...raw };
+      // Migrate the old generated default; explicit custom names remain untouched.
+      if (this.value.userName === 'ユーザー') this.value.userName = 'しま';
     } catch {
       this.value = { ...DEFAULT_SETTINGS };
     }
