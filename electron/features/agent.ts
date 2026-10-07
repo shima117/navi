@@ -6,14 +6,16 @@ import type { Feature } from './Feature';
 import { detectTaskIntent } from '../../src/core/tasks/TaskIntent';
 import { formatTaskSnapshots, type TaskSnapshot } from '../../src/core/tasks/TaskSnapshotPublisher';
 import { TASK_TERMINAL, type TaskControl } from '../../src/core/tasks/TaskProtocol';
+import { approveOpenAiText } from '../../src/core/cloud/OpenAiApproval';
 
 let notices = new Map<string, TaskSnapshot>();
 let noticeTimer: ReturnType<typeof setInterval> | null = null;
 let selectingProject = false;
+let selectingCloud = false;
 let consentEpoch = 0;
 
 async function inspectProject(ctx: AppContext): Promise<string | null> {
-  if (selectingProject || !ctx.windows.main) return null;
+  if (selectingProject || selectingCloud || !ctx.windows.main) return null;
   selectingProject = true;
   const epoch = consentEpoch;
   try {
@@ -49,11 +51,28 @@ export const agentFeature: Feature = {
       return ctx.agent.enqueue('LOCAL_HEALTH', undefined, key as string | undefined);
     });
     ipcMain.handle(IPC.tasksInspectProject, (event) => { mainOnly(event); return inspectProject(ctx); });
+    ipcMain.handle(IPC.tasksCloudState, (event) => { mainOnly(event); return ctx.agent.cloudState(); });
+    ipcMain.handle(IPC.tasksOpenAiText, async (event, input: unknown) => {
+      mainOnly(event);
+      if (selectingCloud || selectingProject || !ctx.windows.main) return null;
+      selectingCloud = true;
+      const epoch = consentEpoch;
+      try {
+        return await approveOpenAiText(input, ctx.agent.cloudState(), Date.now(), async (detail) => {
+          if (!ctx.windows.main) return false;
+          const result = await dialog.showMessageBox(ctx.windows.main, {
+            type: 'question', title: 'OpenAIへの外部送信・料金確認', message: 'この文章だけをOpenAI APIに送りますか？', detail,
+            buttons: ['送らない', 'この1回だけ送信を許可'], defaultId: 0, cancelId: 0, noLink: true,
+          });
+          return result.response === 1;
+        }, () => epoch === consentEpoch && Boolean(ctx.windows.main), (payload) => ctx.agent.enqueueOpenAi(payload));
+      } finally { selectingCloud = false; }
+    });
     ipcMain.handle(IPC.tasksApprovals, (event) => { mainOnly(event); return ctx.agent.listApprovals(); });
     ipcMain.handle(IPC.tasksControl, (event, command: TaskControl, id?: unknown) => {
       mainOnly(event);
       if (!['PAUSE', 'RESUME', 'CANCEL', 'PRIORITIZE', 'DEPRIORITIZE'].includes(command) || (id !== undefined && (typeof id !== 'string' || !ctx.tasks.read(id)))) throw new Error('Invalid task control');
-      if (command === 'CANCEL') consentEpoch++;
+      if (command === 'CANCEL' || command === 'PAUSE') consentEpoch++;
       ctx.agent.control(command, id as string | undefined);
     });
     ipcMain.handle(IPC.tasksAgentState, (event) => { mainOnly(event); return ctx.agent.status(); });
@@ -75,7 +94,7 @@ export const agentFeature: Feature = {
           const selected = tasks.filter((t) => intent.target ? t.title.includes(intent.target === 'project' ? 'プロジェクト' : '環境') : !TASK_TERMINAL.has(t.status));
           return formatTaskSnapshots(selected.length ? selected : tasks.slice(-1));
         }
-        if (intent.command === 'CANCEL') consentEpoch++;
+        if (intent.command === 'CANCEL' || intent.command === 'PAUSE') consentEpoch++;
         const eligible = tasks.filter((t) => !TASK_TERMINAL.has(t.status) && (intent.command !== 'RESUME' || t.status === 'PAUSED' || t.status === 'WAITING'));
         if (!eligible.length) return '今は操作できる裏作業はありません。';
         if (!intent.all && eligible.length > 1) return '作業が複数あります。作業タブで対象を選んでください。';
@@ -91,7 +110,7 @@ export const agentFeature: Feature = {
     ctx.bus.on('voice.partial', ({ text, source }) => {
       if (source !== 'USER_MIC') return;
       const intent = detectTaskIntent(text);
-      if (intent.type === 'control' && intent.command === 'CANCEL' && (selectingProject || ctx.tasks.list().some((t) => !TASK_TERMINAL.has(t.status)))) {
+      if (intent.type === 'control' && intent.command === 'CANCEL' && (selectingProject || selectingCloud || ctx.tasks.list().some((t) => !TASK_TERMINAL.has(t.status)))) {
         consentEpoch++;
         try { ctx.agent.control('CANCEL'); notices.clear(); } catch { /* Worker already stopped. */ }
       }

@@ -5,6 +5,8 @@ import { PROJECT_CONSENT_TTL, type ApprovalRecord, type ProjectConsent } from '.
 import { initialTask, TASK_TERMINAL, type AgentCommand, type AgentEvent, type TaskControl, type TaskKind } from '../../src/core/tasks/TaskProtocol';
 import type { TaskSnapshotPublisher } from '../../src/core/tasks/TaskSnapshotPublisher';
 import type { EventBus } from '../../src/core/events/EventBus';
+import { OPENAI_LIMITS, OPENAI_RATES_EXPIRE, type OpenAiCloudState } from '../../src/core/cloud/OpenAiOptions';
+import { CLOUD_CONSENT_TTL, cloudFingerprint, type OpenAiPayload } from '../../src/core/cloud/OpenAiScope';
 
 /** Main holds only cached snapshots. Task DB and work execute in the utility process. */
 export class AgentClient {
@@ -16,10 +18,23 @@ export class AgentClient {
   private failure: string | null = null;
   private pid: number | null = null;
   private approvals: ApprovalRecord[] = [];
+  private cloud: OpenAiCloudState = { keyConfigured: false, limits: OPENAI_LIMITS, dayChargedMicros: 0, monthChargedMicros: 0, ratesExpireAt: OPENAI_RATES_EXPIRE };
   constructor(private readonly tasks: TaskSnapshotPublisher, private readonly bus: EventBus) {}
 
   status() { return { ready: this.ready, pid: this.pid, error: this.failure }; }
   listApprovals() { return structuredClone(this.approvals); }
+  cloudState() { return structuredClone(this.cloud); }
+  /** Only native confirmation may call this; no credential or receipt reaches the renderer. */
+  enqueueOpenAi(cloud: OpenAiPayload): string {
+    if (!this.ready || this.stopped || this.failure) throw new Error('作業サービスが利用できません。');
+    if (this.tasks.list().filter((t) => !TASK_TERMINAL.has(t.status)).length >= 64) throw new Error('作業の待ち数が上限です。');
+    const id = randomUUID(); const now = Date.now();
+    const consent = { id: randomUUID(), taskId: id, fingerprint: cloudFingerprint(id, cloud), grantedAt: now, expiresAt: now + CLOUD_CONSENT_TTL };
+    const request = { id, idempotencyKey: id, kind: 'OPENAI_TEXT' as const, cloud, approvalId: consent.id, traceId: randomUUID(), createdAt: now };
+    this.tasks.update(initialTask(request).snapshot);
+    this.send({ type: 'enqueue', request, cloudConsent: consent });
+    return id;
+  }
   /** Call only after native folder selection AND native explicit confirmation. */
   enqueueProject(projectRoot: string): string {
     const id = randomUUID();
@@ -32,7 +47,8 @@ export class AgentClient {
     try {
       const child = utilityProcess.fork(path.join(__dirname, 'worker.js'), [], {
         serviceName: 'NAVI Agent', stdio: 'pipe',
-        env: { NAVI_AGENT_DATA: app.getPath('userData'), SYSTEMROOT: process.env.SYSTEMROOT ?? '', TEMP: process.env.TEMP ?? '' },
+        env: { NAVI_AGENT_DATA: app.getPath('userData'), SYSTEMROOT: process.env.SYSTEMROOT ?? '', TEMP: process.env.TEMP ?? '',
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '' },
       });
       this.child = child;
       child.on('message', (event: AgentEvent) => {
@@ -102,8 +118,11 @@ export class AgentClient {
       this.ready = true;
       this.pid = event.pid;
       this.approvals = event.approvals;
+      if (event.cloud) this.cloud = event.cloud;
       for (const snapshot of event.snapshots) this.tasks.update(snapshot, snapshot.lastReport);
       for (const command of this.pending.splice(0)) this.child?.postMessage(command);
+    } else if (event.type === 'cloud') {
+      this.cloud = event.state;
     } else if (event.type === 'approvals') {
       this.approvals = event.records;
     } else if (event.type === 'snapshot') {

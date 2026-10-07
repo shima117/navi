@@ -1,6 +1,14 @@
 import type { Db } from '../memory/Db';
 import { isVerifiedSuccess } from './OperationReport';
 import { TASK_TERMINAL, type TaskKind, type TaskRecord } from './TaskProtocol';
+import { cloudFingerprint } from '../cloud/OpenAiScope';
+
+/** The submitted prompt stays in worker RAM only; replies are task history. */
+function serialize(record: TaskRecord): string {
+  const copy = structuredClone(record);
+  if (copy.request.cloud) delete copy.request.cloud.inputText;
+  return JSON.stringify(copy);
+}
 
 /** All database IO occurs in the separate Agent process, never Electron main. */
 export class TaskDatabase {
@@ -18,11 +26,13 @@ export class TaskDatabase {
       const existing = this.db.prepare('SELECT record_json FROM agent_tasks WHERE idempotency_key = ?').get(record.request.idempotencyKey);
       if (existing) {
         const prior = JSON.parse(String(existing.record_json)) as TaskRecord;
-        if (prior.request.kind !== record.request.kind || prior.request.projectRoot !== record.request.projectRoot) throw new Error('Idempotency key conflicts with another action');
+        if (prior.request.kind !== record.request.kind || prior.request.projectRoot !== record.request.projectRoot
+          || (prior.request.cloud ? cloudFingerprint('scope', prior.request.cloud) : undefined)
+            !== (record.request.cloud ? cloudFingerprint('scope', record.request.cloud) : undefined)) throw new Error('Idempotency key conflicts with another action');
         return prior;
       }
       this.db.prepare('INSERT INTO agent_tasks(id,idempotency_key,kind,record_json,created_at) VALUES(?,?,?,?,?)')
-        .run(record.request.id, record.request.idempotencyKey, record.request.kind, JSON.stringify(record), record.request.createdAt);
+        .run(record.request.id, record.request.idempotencyKey, record.request.kind, serialize(record), record.request.createdAt);
       this.audit(record);
       return structuredClone(record);
     });
@@ -34,7 +44,7 @@ export class TaskDatabase {
       if (!old) throw new Error('Task not registered');
       if (TASK_TERMINAL.has(old.snapshot.status)) return;
       this.db.prepare('UPDATE agent_tasks SET record_json = ?, ended_at = ? WHERE id = ?')
-        .run(JSON.stringify(record), record.endedAt, record.request.id);
+        .run(serialize(record), record.endedAt, record.request.id);
       if (old.snapshot.status !== record.snapshot.status) this.audit(record);
     });
   }

@@ -20,7 +20,7 @@ test.beforeEach(async () => {
     desktopText: { maxWidth: 520, maxLines: 4, fontSize: 28, temporarySeconds: 3 },
   }));
   app = await electron.launch({ executablePath: ELECTRON_BIN, args: ['.', '--no-sandbox'], cwd: ROOT,
-    env: { ...process.env, NAVI_USER_DATA: profile }, timeout: 30000 });
+    env: { ...process.env, NAVI_USER_DATA: profile, OPENAI_API_KEY: '' }, timeout: 30000 });
   await expect.poll(() => app.windows().some((w) => w.url().endsWith('/index.html'))).toBe(true);
   main = app.windows().find((w) => w.url().endsWith('/index.html'))!;
   await expect(main.locator('header .brand')).toHaveText('NAVI');

@@ -4,7 +4,8 @@
 設計書: [`docs/design.md`](docs/design.md)
 追加再設計の進捗: [Personal Agent v3.2](docs/personal-agent-v3.2-status.md)
 
-Electron + React + TypeScript / Ollama / VOICEVOX / faster-whisper。すべて `127.0.0.1` で動作します。
+Electron + React + TypeScript / Ollama / VOICEVOX / faster-whisper。通常の会話・音声・画面処理は `127.0.0.1`。
+明示承認した文章相談だけOpenAI APIを利用できます。設定と制約は [OpenAI API](docs/openai-api.md)。
 
 ## セットアップ (Windows 10/11)
 
@@ -55,7 +56,8 @@ Settings の「デスクトップの文字表示」で見た目・位置・ク�
 プロジェクトはフォルダ選択後、読む対象・行わない操作を確認して「この作業だけ許可」を押すと開始します。
 承認は対象と1作業に限定し15分で期限切れ、中止・再起動で失効します。作業タブで承認記録も見られます。
 作業は別プロセスで実行し、履歴は `userData/tasks.sqlite` にローカル保存します（選択したパス・確認結果を含みます）。
-アプリ再起動後の未完了作業は保留され、勝手には再実行しません。任意のコード修正・PC操作・インストール・Cloud 使用はまだ無効です。
+アプリ再起動後の未完了作業は保留され、勝手には再実行しません。任意のコード修正・PC操作・インストール・未承認Cloud使用は無効です。
+作業タブの「OpenAI APIに文章を相談」は本文・モデル・料金を毎回確認した1回のみ送信。APIキー未設定なら送信せず、自動再送もしません。
 
 現行仕様は [docs/design.md](docs/design.md)、旧設計は [docs/archive/design-v1-tarkov.md](docs/archive/design-v1-tarkov.md) です。
 継続開発は `codex/v3-2-agent-foundation`（PR #3）と後継を基準にし、古いOverlayブランチで上書きしないでください。
@@ -75,6 +77,7 @@ src/core/            Friend Core — ゲーム固有ロジックを置かない
   resource/          ResourceGovernor (GAME_PRIORITY / BALANCED / DESKTOP_CHAT)
   memory/            MemoryStore (SQLite + インメモリ退避), MemoryWriter, SessionSummarizer, 秘密情報の伏せ字化
   tasks/             TaskRegistry / SQLite / Scheduler / 停止 / 失敗予算 / ResourceLock / CircuitBreaker / 固定読み取り能力
+  cloud/             OpenAI Responses API / ネイティブ承認 / 送信範囲固定 / 概算利用台帳（自動送信・再送なし）
   plugins/           GamePlugin IF (§15), PluginHost — プラグイン障害は Generic に退避
 src/avatar/          AvatarDirector — cue → 60fps パラメータ (表情/ジェスチャ/まばたき/呼吸/口パク/眼鏡追従)
 src/renderer/        FriendShell UI, 画面ストリーム, マイク → 音声サービス, 音声再生, アバター窓
@@ -124,6 +127,7 @@ e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物�
 | v3.2 第1区切り | 独立文字窓 / TaskSnapshotPublisher | 🟡 文字表示・音声抑制・設定・Windows E2Eまで。Task DB / AgentService / worker / Protected Coreは次の区切り |
 | v3.2 第2区切り | AgentService / Task DB / 安全な確認作業 | 🟡 別プロセスの実確認・保存・停止・再開・失敗制御まで。任意の書き換え / Cloud承認 / Job Object / Protected Coreは未実装 |
 | v3.2 第3区切り | 現行設計整理 / PolicyEngine / 読み取り承認 | 🟡 読み取りTask境界の権限判定・対象限定承認・SQLite監査まで。Cloud用承認/予算、OS隔離、Protected Coreは未実装 |
+| v3.2 第4区切り | OpenAI API / 本文限定承認 / 概算利用台帳 | 🟡 明示文章相談・モデル選択・毎回承認・利用上限・自動再送なし。実キー受入、Research/Coding、OS隔離は未完了 |
 
 PR-11のSYSTEM音声は、直前6秒のRAMバッファから「突発音の候補」を拾えます。音の種類（銃声など）はまだ判定しません。Voicemodの設定欄は接続実装まで無効です。
 

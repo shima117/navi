@@ -115,6 +115,11 @@ footer { border-top: 1px solid var(--line); }
 }
 .memory-danger { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 4px; }
 .memory-danger .row { flex-wrap: wrap; }
+.openai-task .row { flex-wrap: wrap; }
+.openai-task textarea {
+  font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 8px 10px; min-height: 100px; resize: vertical;
+}
 .memory-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .memory button.danger { color: var(--accent); border-color: var(--accent); }
 
