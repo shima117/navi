@@ -1,6 +1,13 @@
 import type { DiagnosticsExportResult, DiagnosticsSnapshot } from '../src/core/telemetry/DiagnosticsReport';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import { IPC, type CaptureSource, type FriendPush, type NaviSettings, type VoiceServiceEvent } from './ipc';
+import {
+  IPC,
+  type CaptureSource,
+  type FriendPush,
+  type NaviSettings,
+  type OcrSettingsPush,
+  type VoiceServiceEvent,
+} from './ipc';
 import type { MemoryClearScope } from './ipc';
 import type { MemoryItem, MemoryStats, MemoryTier } from '../src/core/memory/MemoryStore';
 
@@ -28,6 +35,8 @@ const api = {
     onFrameRequest: (cb: (req: { requestId: string; which: 'latest' | 'recent' }) => void) =>
       subscribe(IPC.captureFrameRequest, cb),
     respondFrame: (requestId: string, frame: unknown) => ipcRenderer.send(IPC.captureFrameResponse, requestId, frame),
+    sendOcrSummary: (summary: unknown) => ipcRenderer.send(IPC.captureOcrSummary, summary),
+    onOcrConfig: (cb: (cfg: OcrSettingsPush) => void) => subscribe(IPC.captureOcrConfig, cb),
   },
   friend: {
     submitText: (text: string): Promise<void> => ipcRenderer.invoke(IPC.friendSubmitText, text),

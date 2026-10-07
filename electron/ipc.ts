@@ -13,6 +13,10 @@ export const IPC = {
   captureFrameRequest: 'capture:frameRequest',
   /** renderer → main: the requested frame. */
   captureFrameResponse: 'capture:frameResponse',
+  /** renderer → main: short OCR summary (≤300 chars) of a high-change frame. Never logged or stored. */
+  captureOcrSummary: 'capture:ocrSummary',
+  /** main → renderer: OCR settings / resource mode changed (OcrSettingsPush). */
+  captureOcrConfig: 'capture:ocrConfig',
 
   friendSubmitText: 'friend:submitText',
   friendGetState: 'friend:getState',
@@ -88,6 +92,10 @@ export interface NaviSettings {
   telemetryToFile: boolean;
   /** Helper processes NAVI starts and supervises. All off by default. */
   managedProcesses: ManagedProcessesSettings;
+  /** Read text on the shared screen (OCR, RAM only). */
+  ocrEnabled: boolean;
+  /** OCR is off in GAME_PRIORITY unless this is on (§4: protect game FPS). */
+  ocrInGamePriority: boolean;
 }
 
 export const DEFAULT_SETTINGS: NaviSettings = {
@@ -105,7 +113,12 @@ export const DEFAULT_SETTINGS: NaviSettings = {
   autoResourceMode: true,
   telemetryToFile: false,
   managedProcesses: DEFAULT_MANAGED_PROCESSES,
+  ocrEnabled: true,
+  ocrInGamePriority: false,
 };
+
+/** What the renderer's OCR scheduler needs from settings. */
+export type OcrSettingsPush = Pick<NaviSettings, 'ocrEnabled' | 'ocrInGamePriority' | 'resourceMode'>;
 
 export type FriendPush =
   | { type: 'transcript'; role: 'user' | 'navi'; text: string; at: number; interrupted?: boolean }

@@ -13,8 +13,10 @@ import {
 import type { MemoryStore } from '../memory/MemoryStore';
 import type { PluginHost } from '../plugins/PluginHost';
 import { detectScreenReference } from '../screen/ScreenReference';
-import type { VisionService } from '../screen/VisionService';
+import type { VisionHints, VisionService } from '../screen/VisionService';
 import type { FrameSummary } from '../screen/FrameSummary';
+import { formatPrice, priceSignature, type ScreenOcr } from '../screen/OcrAnalysis';
+import { RecentRegionChanges } from '../screen/RegionHash';
 import { errorMessage } from '../telemetry/redact';
 import type { CompanionResponse, PluginContext, PluginEvent, ScreenObservation, UserUtterance } from '../types';
 
@@ -47,10 +49,17 @@ interface TurnInput {
   screenUnavailable: boolean;
   pluginContext: PluginContext | null;
   toolResult?: { name: string; result: unknown };
+  /** The observation is only OCR'd text: nothing beyond it may be claimed. */
+  observationVia?: 'ocr';
 }
 
 const FOCUS_HOLD_MS = 20_000;
 const PENDING_EVENT_TTL_MS = 15_000;
+/** OCR text older than this no longer describes the screen. */
+const OCR_FRESH_MS = 20_000;
+/** The same price tag is not brought up again within this window. */
+const PRICE_REPEAT_MS = 10 * 60_000;
+const PRICE_TOPIC = 'ocr-price:';
 
 /**
  * The single decision point for everything Navi says (design doc §6.1).
@@ -67,6 +76,10 @@ export class FriendOrchestrator {
   private screenActivity = 0;
   private pendingEvents: PluginEvent[] = [];
   private pendingScreenChange: FrameSummary | null = null;
+  private latestOcr: ScreenOcr | null = null;
+  private pendingPriceOcr: ScreenOcr | null = null;
+  private surfacedPrices = new Map<string, number>();
+  private readonly recentRegions = new RecentRegionChanges();
 
   constructor(private readonly deps: OrchestratorDeps) {
     this.conversation = deps.conversation ?? new ConversationManager();
@@ -87,6 +100,8 @@ export class FriendOrchestrator {
     bus.on('screen.frame', (f) => {
       this.screenActivity = this.screenActivity * 0.9 + f.change * 0.1;
     });
+    bus.on('screen.frame', (f) => this.onFrameRegions(f));
+    bus.on('screen.ocr', (o) => this.onScreenOcr(o));
   }
 
   /** User turn from voice or the text box. Newer turns cancel older in-flight ones. */
@@ -157,6 +172,8 @@ export class FriendOrchestrator {
         topicKey: `screen:${this.pendingScreenChange.hash.slice(0, 6)}`,
       });
     }
+    const priceCandidate = this.priceCandidate(now);
+    if (priceCandidate) candidates.push(priceCandidate);
     const lastUser = [...snap.turns].reverse().find((t) => t.role === 'user');
     candidates.push({
       // Silence-driven: gated by InitiativeScheduler.minSilenceMs.
@@ -185,17 +202,25 @@ export class FriendOrchestrator {
     const c = decision.candidate;
     if (c.source === 'plugin') this.pendingEvents = this.pendingEvents.filter((e) => e.description !== c.description);
     if (c.source === 'screen') this.pendingScreenChange = null;
+    const priceOcr = this.takePriceOcr(c, now);
 
     const seq = ++this.turnSeq;
     const abort = new AbortController();
     this.inflight = abort;
-    const observation =
-      c.source === 'screen' || c.source === 'plugin' ? await this.look('current', null, false, abort.signal) : null;
+    const { observation, observationVia } = await this.initiativeObservation(c, priceOcr, abort.signal);
     if (seq !== this.turnSeq) return { speak: false, score: decision.score, reason: 'superseded' };
     const pluginContext = observation ? await this.deps.plugins.enrich(observation) : null;
     const res = await this.runTurn(
       seq,
-      { kind: 'initiative', userText: null, candidate: c, observation, screenUnavailable: false, pluginContext },
+      {
+        kind: 'initiative',
+        userText: null,
+        candidate: c,
+        observation,
+        observationVia,
+        screenUnavailable: false,
+        pluginContext,
+      },
       abort.signal,
     );
     return { ...decision, speak: res.speak };
@@ -217,6 +242,87 @@ export class FriendOrchestrator {
     }
   }
 
+  private onFrameRegions(f: FrameSummary): void {
+    this.recentRegions.add(f);
+    // A frame from another source means the share switched: old OCR text is not this screen.
+    if (this.latestOcr && this.latestOcr.sourceId !== f.sourceId) {
+      this.latestOcr = null;
+      this.pendingPriceOcr = null;
+    }
+  }
+
+  /** Prices / sale markers on the shared screen are worth a word: Navi is a penny-pincher (§9, §6.4). */
+  private onScreenOcr(o: ScreenOcr): void {
+    this.latestOcr = o;
+    if (!worthMentioning(o)) return;
+    const seen = this.surfacedPrices.get(ocrSignature(o));
+    if (seen !== undefined && o.capturedAt - seen < PRICE_REPEAT_MS) return;
+    this.pendingPriceOcr = o;
+  }
+
+  private priceCandidate(now: number): InitiativeCandidate | null {
+    const o = this.pendingPriceOcr;
+    if (!o || !this.deps.sharing?.()) return null;
+    if (now - o.capturedAt > OCR_FRESH_MS) {
+      this.pendingPriceOcr = null;
+      return null;
+    }
+    const prices = knownPrices(o)
+      .slice(0, 3)
+      .map((p) => formatPrice(p))
+      .join(' / ');
+    const sale = o.sale ? `セール表示あり(${o.saleMarkers.join('・')})` : '';
+    return {
+      source: 'screen',
+      description: prices
+        ? `共有画面に値段が出ている: ${prices}${sale ? ` / ${sale}` : ''}`
+        : `共有画面に${sale}`,
+      eventImportance: 0.4,
+      novelty: 0.8,
+      userInterest: o.sale ? 1 : 0.85,
+      screenRelevance: 1,
+      callbackValue: 0,
+      topicKey: `${PRICE_TOPIC}${ocrSignature(o)}`,
+    };
+  }
+
+  /** The pending price OCR if `c` is its candidate; it is then marked as talked about. */
+  private takePriceOcr(c: InitiativeCandidate, now: number): ScreenOcr | null {
+    const o = this.pendingPriceOcr;
+    if (!o || c.topicKey !== `${PRICE_TOPIC}${ocrSignature(o)}`) return null;
+    this.pendingPriceOcr = null;
+    for (const [sig, at] of this.surfacedPrices) if (now - at >= PRICE_REPEAT_MS) this.surfacedPrices.delete(sig);
+    this.surfacedPrices.set(ocrSignature(o), now);
+    return o;
+  }
+
+  /**
+   * What Navi gets to "see" for an initiative turn. A price tag OCR already
+   * read is enough on its own, so Vision is not woken for it; Vision runs only
+   * when OCR cannot tell what is going on (§7.4).
+   */
+  private async initiativeObservation(
+    c: InitiativeCandidate,
+    priceOcr: ScreenOcr | null,
+    signal: AbortSignal,
+  ): Promise<{ observation: ScreenObservation | null; observationVia?: 'ocr' }> {
+    if (priceOcr && knownPrices(priceOcr).length > 0) return { observation: ocrObservation(priceOcr), observationVia: 'ocr' };
+    const observation =
+      c.source === 'screen' || c.source === 'plugin' ? await this.look('current', null, false, signal) : null;
+    if (!observation && priceOcr && !signal.aborted) return { observation: ocrObservation(priceOcr), observationVia: 'ocr' };
+    return { observation };
+  }
+
+  /** Recent OCR text and changed screen areas, handed to Vision as hints (§7.4). */
+  private visionHints(now: number): VisionHints | undefined {
+    const ocr = this.latestOcr && now - this.latestOcr.capturedAt <= OCR_FRESH_MS ? this.latestOcr : null;
+    const sourceId = ocr?.sourceId ?? this.recentRegions.sourceId;
+    if (!sourceId) return undefined;
+    const changedRegions = this.recentRegions.sourceId === sourceId ? this.recentRegions.labels(now) : [];
+    if (!ocr && changedRegions.length === 0) return undefined;
+    return { sourceId, ocrText: ocr?.text, changedRegions };
+  }
+
   private async look(
     kind: 'current' | 'recent',
     userText: string | null,
@@ -227,7 +333,7 @@ export class FriendOrchestrator {
     if (!vision || !this.deps.isHealthy('vision') || !(this.deps.sharing?.() ?? true)) return null;
     try {
       const startedAt = this.now();
-      const obs = await vision.observe(kind, userText, { highPriority, now: this.now(), signal });
+      const obs = await vision.observe(kind, userText, { highPriority, now: startedAt, signal, hints: this.visionHints(startedAt) });
       if (obs) this.deps.bus.emit('metrics.timing', { kind: 'vision', ms: this.now() - startedAt, at: this.now() });
       if (obs) this.deps.bus.emit('screen.observed', obs);
       return obs;
@@ -358,6 +464,11 @@ export class FriendOrchestrator {
           (o.referent ? ` / 指している対象: ${o.referent}` : '') +
           (o.ocrText ? ` / 画面の文字: ${o.ocrText}` : ''),
       );
+      if (input.observationVia === 'ocr') {
+        context.push(
+          '↑は画面の文字をOCRで読んだだけで、画像は見ていない（誤読もありうる）。文字に書いてあること以外（見た目・色・何の商品か）は言わない。',
+        );
+      }
     } else if (input.screenUnavailable) {
       context.push('画面は今見えていない。見えているふりをせず、見えないと正直に言う。');
     } else if (!(this.deps.sharing?.() ?? false)) {
@@ -388,4 +499,31 @@ export class FriendOrchestrator {
     }
     return messages;
   }
+}
+
+/** Prices with a known currency; a bare "1.2k" is too often a view count to react to. */
+function knownPrices(o: ScreenOcr) {
+  return o.prices.filter((p) => p.currency !== 'UNKNOWN');
+}
+
+function worthMentioning(o: ScreenOcr): boolean {
+  return knownPrices(o).length > 0 || o.sale;
+}
+
+function ocrSignature(o: ScreenOcr): string {
+  return priceSignature(knownPrices(o)) || `sale:${o.saleMarkers.join(',')}`;
+}
+
+/** A low-confidence observation that says no more than the OCR text does. */
+function ocrObservation(o: ScreenOcr): ScreenObservation {
+  const prices = knownPrices(o).map((p) => formatPrice(p));
+  return {
+    frameId: o.frameId,
+    capturedAt: o.capturedAt,
+    sourceId: o.sourceId,
+    sourceName: o.sourceName,
+    summary: prices.length ? `画面の文字に金額が見える: ${prices.join(' / ')}` : '画面の文字にセール表示が見える',
+    ocrText: o.text,
+    confidence: 0.3,
+  };
 }

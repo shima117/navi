@@ -1,4 +1,5 @@
 import type { NaviSettings } from '../../../electron/ipc';
+import { OcrSettingsFields } from '../ocr/OcrSettingsFields';
 import { useNavi } from '../state/NaviContext';
 
 export function SettingsTab() {
@@ -43,6 +44,7 @@ export function SettingsTab() {
         />
         会話モデルを qwen3:8b に切り替える
       </label>
+      <OcrSettingsFields />
       <h3>サービス状態</h3>
       <ul className="health">
         {(['chat', 'vision', 'stt', 'tts'] as const).map((s) => (
