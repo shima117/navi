@@ -76,3 +76,37 @@ footer { border-top: 1px solid var(--line); }
 .game-row button.active { border-color: var(--share); }
 .game-panel { overflow: auto; height: 100%; }
 .game-panel > .empty { padding: 20px; }
+
+/* ---- Memory tab (PR-09: src/renderer/tabs/MemoryTab.tsx) ---- */
+.memory { max-width: 920px; }
+.memory-settings { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 12px; }
+.memory-settings .hint { margin: -4px 0 10px 26px; }
+.memory-settings .field { max-width: 200px; }
+.memory-stats { font-size: 12px; color: var(--muted); }
+.memory-warning { font-size: 13px; color: var(--warn); border: 1px solid var(--warn); border-radius: 6px; padding: 8px 10px; }
+.memory-error { font-size: 13px; color: var(--accent); }
+.memory-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.memory-toolbar input[type='search'] { flex: 1; min-width: 200px; }
+.memory-filter { display: flex; gap: 4px; }
+.memory-filter button.active { border-color: var(--share); color: var(--share); }
+.memory-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.memory-list > .empty { padding: 12px 0; }
+.memory-item { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--panel); }
+.memory-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.memory-tier, .memory-source { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.memory-tier.long { color: var(--ok); border-color: var(--ok); }
+.memory-tier.session { color: var(--share); border-color: var(--share); }
+.memory-meta { font-size: 11px; color: var(--muted); margin-left: auto; }
+.memory-body { display: flex; align-items: flex-start; gap: 12px; }
+.memory-text { flex: 1; margin: 8px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.memory-actions { display: flex; gap: 6px; margin-top: 6px; }
+.memory-actions button, .memory-edit button { font-size: 12px; padding: 4px 10px; }
+.memory-edit { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.memory-edit textarea {
+  font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; min-height: 60px; resize: vertical;
+}
+.memory-danger { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 4px; }
+.memory-danger .row { flex-wrap: wrap; }
+.memory-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.memory button.danger { color: var(--accent); border-color: var(--accent); }
