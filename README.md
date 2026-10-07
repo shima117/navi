@@ -44,7 +44,7 @@ src/core/            Friend Core — ゲーム固有ロジックを置かない
   ai/                OllamaClient, ModelRouter, HealthMonitor (再接続 1,2,5,10,30 秒)
   voice/             VOICEVOX クライアント, AudioQuery → 口パク, barge-in 状態機械
   resource/          ResourceGovernor (GAME_PRIORITY / BALANCED / DESKTOP_CHAT)
-  memory/            MemoryStore インターフェース (現状インメモリ; SQLite は PR-09)
+  memory/            MemoryStore (SQLite + インメモリ退避), MemoryWriter, SessionSummarizer, 秘密情報の伏せ字化
   plugins/           GamePlugin IF (§15), PluginHost — プラグイン障害は Generic に退避
 src/avatar/          AvatarDirector — cue → 60fps パラメータ (表情/ジェスチャ/まばたき/呼吸/口パク/眼鏡追従)
 src/plugins/tarkov/  TarkovPlugin (骨組み; 既存資産の移植は PR-08)
@@ -84,7 +84,7 @@ npm run typecheck
 | PR-06 | EventBus, InitiativeScheduler, トピック疲労, 集中時抑制 | ✅ |
 | PR-07 | Avatar Runtime | 🟡 AvatarDirector と透過/クリック透過窓まで。PuppetJS (PSD/WebGL) の移植は未着手 — 現在は仮の描画 |
 | PR-08 | Tarkov Plugin | 🟡 IF とツール定義のみ。既存 Tarkov Assistant のドメイン/データ移植は未着手 |
-| PR-09 | Memory (SQLite) | 🟡 インメモリ実装と設定のみ |
+| PR-09 | Memory (SQLite) | ✅ `userData/navi.sqlite` (node:sqlite, FTS5 bigram 検索), セッション/長期の昇格, MemoryWriter, セッション要約, Memory タブ (検索・編集・削除・全消去)。発言ログは既定で保存しない (設定でオン, 保存期間つき)。開けない場合はインメモリに退避 |
 | PR-10 | Hardening | 🟡 再接続/障害隔離のみ。診断画面・受入テスト自動化は未着手 |
 
 既存の Tarkov Assistant / PuppetJS のコードはこのリポジトリに含まれていないため、PR-07 / PR-08 はそれらを取り込んだ後に進めます。

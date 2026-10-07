@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC, type CaptureSource, type FriendPush, type NaviSettings, type VoiceServiceEvent } from './ipc';
+import type { MemoryClearScope } from './ipc';
+import type { MemoryItem, MemoryStats, MemoryTier } from '../src/core/memory/MemoryStore';
 
 // Bundled with esbuild (sandboxed preloads cannot require local modules).
 
@@ -58,6 +60,14 @@ const api = {
   settings: {
     get: (): Promise<NaviSettings> => ipcRenderer.invoke(IPC.settingsGet),
     set: (patch: Partial<NaviSettings>): Promise<NaviSettings> => ipcRenderer.invoke(IPC.settingsSet, patch),
+  },
+  memory: {
+    list: (tier?: MemoryTier): Promise<MemoryItem[]> => ipcRenderer.invoke(IPC.memoryList, tier),
+    search: (query: string, tier?: MemoryTier): Promise<MemoryItem[]> => ipcRenderer.invoke(IPC.memorySearch, query, tier),
+    update: (id: string, text: string): Promise<MemoryItem | null> => ipcRenderer.invoke(IPC.memoryUpdate, id, text),
+    delete: (id: string): Promise<void> => ipcRenderer.invoke(IPC.memoryDelete, id),
+    clear: (scope: MemoryClearScope): Promise<void> => ipcRenderer.invoke(IPC.memoryClear, scope),
+    stats: (): Promise<MemoryStats> => ipcRenderer.invoke(IPC.memoryStats),
   },
 };
 

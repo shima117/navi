@@ -3,7 +3,8 @@ import { OllamaClient } from '../src/core/ai/OllamaClient';
 import { ModelRouter } from '../src/core/ai/ModelRouter';
 import { HealthMonitor } from '../src/core/ai/HealthMonitor';
 import { ResourceGovernor } from '../src/core/resource/ResourceGovernor';
-import { InMemoryMemoryStore, type MemoryStore } from '../src/core/memory/MemoryStore';
+import type { MemoryStore } from '../src/core/memory/MemoryStore';
+import { createMemoryStore } from './features/memory';
 import { PluginHost } from '../src/core/plugins/PluginHost';
 import { FriendOrchestrator } from '../src/core/orchestrator/FriendOrchestrator';
 import { VisionService } from '../src/core/screen/VisionService';
@@ -39,7 +40,8 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
   const governor = new ResourceGovernor(s.resourceMode);
   const router = new ModelRouter(governor);
   const ollama = new OllamaClient();
-  const memory: MemoryStore = new InMemoryMemoryStore();
+  // SQLite (userData/navi.sqlite) with an in-memory fallback; see features/memory.ts.
+  const memory: MemoryStore = createMemoryStore(settings);
   const plugins = new PluginHost(bus);
   plugins.register(new TarkovPlugin());
 

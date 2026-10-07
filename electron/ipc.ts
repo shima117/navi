@@ -39,7 +39,18 @@ export const IPC = {
 
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
+
+  /** Memory tab (§6.5, PR-09). */
+  memoryList: 'memory:list',
+  memorySearch: 'memory:search',
+  memoryUpdate: 'memory:update',
+  memoryDelete: 'memory:delete',
+  memoryClear: 'memory:clear',
+  memoryStats: 'memory:stats',
 } as const;
+
+/** What memory:clear removes: session memories, long-term memories, or everything incl. logs. */
+export type MemoryClearScope = 'session' | 'long' | 'all';
 
 export interface CaptureSource {
   id: string;
@@ -59,6 +70,10 @@ export interface NaviSettings {
   /** Persist conversation memory across sessions. */
   persistMemory: boolean;
   micDeviceId: string | null;
+  /** Log every utterance and screen summary to navi.sqlite (opt-in, §6.5). */
+  persistUtterances: boolean;
+  /** Days to keep utterance / screen logs and unused session memories. */
+  utteranceRetentionDays: number;
 }
 
 export const DEFAULT_SETTINGS: NaviSettings = {
@@ -71,6 +86,8 @@ export const DEFAULT_SETTINGS: NaviSettings = {
   avatarClickThrough: true,
   persistMemory: false,
   micDeviceId: null,
+  persistUtterances: false,
+  utteranceRetentionDays: 30,
 };
 
 export type FriendPush =
