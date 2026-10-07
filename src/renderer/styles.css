@@ -80,7 +80,7 @@ footer { border-top: 1px solid var(--line); }
 /* ---- Diagnostics tab (PR-10 hardening) ---- */
 .diag section { margin: 18px 0; }
 .diag h3 { margin: 0 0 8px; font-size: 15px; }
-.diag p { margin: 6px 0; }
+.diag p { margin: 6px 0; font-size: 14px; }
 .diag-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .diag-head h2 { margin: 0 auto 0 0; }
 .diag-export-msg { max-width: 100%; overflow-wrap: anywhere; }

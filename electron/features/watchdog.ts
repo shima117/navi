@@ -22,6 +22,8 @@ import type { Feature } from './Feature';
 /** SIGTERM first; anything still alive after this gets SIGKILL (POSIX). */
 const KILL_GRACE_MS = 3_000;
 const PROBE_TIMEOUT_MS = 1_500;
+/** Longest wait for stderr to drain after the process exits. */
+const STDERR_DRAIN_MS = 500;
 
 let watchdog: ProcessWatchdog | null = null;
 let unsubscribe: (() => void) | null = null;
@@ -55,6 +57,8 @@ export const watchdogFeature: Feature = {
       probe: probeLocal,
       onCrash: (status, gaveUp) => reportCrash(ctx, status, gaveUp),
     });
+    // Safety net if the app exits without before-quit (signals, crashes in main): no orphaned helpers.
+    process.once('exit', () => watchdog?.stopAll());
   },
   start(ctx) {
     const defaultVoiceServiceCwd = path.join(app.getAppPath(), 'voice-service');
@@ -104,12 +108,20 @@ function spawnChild(spec: ProcessSpec): ChildProcessLike {
   });
   const exitListeners: Array<(info: ExitInfo) => void> = [];
   let exited: ExitInfo | null = null;
+  let drainTimer: ReturnType<typeof setTimeout> | null = null;
   const finish = (info: ExitInfo) => {
+    if (drainTimer) clearTimeout(drainTimer);
     if (exited) return;
     exited = info;
     for (const l of exitListeners) l(info);
   };
-  child.once('exit', (code, signal) => finish({ code, signal }));
+  const alive = () => child.pid !== undefined && child.exitCode === null && child.signalCode === null;
+  // 'exit' can arrive before the last stderr chunk (the crash traceback). 'close' comes once the
+  // pipe is drained; cap the wait in case a grandchild keeps the pipe open.
+  child.once('exit', (code, signal) => {
+    drainTimer = setTimeout(() => finish({ code, signal }), STDERR_DRAIN_MS);
+  });
+  child.once('close', (code, signal) => finish({ code, signal }));
   child.on('error', (err) => {
     // Without a pid the process never started (ENOENT, EACCES, bad cwd): that is its exit.
     if (child.pid === undefined) finish({ code: null, signal: null, error: err.message });
@@ -127,7 +139,7 @@ function spawnChild(spec: ProcessSpec): ChildProcessLike {
       child.stderr?.on('data', (chunk: string) => cb(chunk));
     },
     kill() {
-      if (exited || child.pid === undefined) return;
+      if (!alive()) return;
       try {
         if (process.platform === 'win32') {
           // Kill the whole tree: `ollama serve` and the engines start their own workers.
@@ -135,7 +147,7 @@ function spawnChild(spec: ProcessSpec): ChildProcessLike {
         } else {
           child.kill('SIGTERM');
           setTimeout(() => {
-            if (!exited) child.kill('SIGKILL');
+            if (alive()) child.kill('SIGKILL');
           }, KILL_GRACE_MS).unref();
         }
       } catch (err) {

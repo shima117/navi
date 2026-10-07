@@ -165,7 +165,7 @@ export function DiagnosticsTab() {
                     <tr key={kind} data-latency={kind}>
                       <td>
                         {label}
-                        {kind === 'response' && <span className="hint"> (目標 {fmtMs(snap.responseTargetMs)} 以内)</span>}
+                        {kind === 'response' && <span className="hint"> (目標 {snap.responseTargetMs / 1000} 秒以内)</span>}
                       </td>
                       <td>{fmtMs(l.p50)}</td>
                       <td className={slow ? 'diag-warn' : ''}>{fmtMs(l.p95)}</td>

@@ -31,6 +31,10 @@ npm start                            # build して起動
 
 どのサービスが落ちていてもアプリは起動します (AI offline → 表示のみ / TTS 停止 → 字幕のみ / STT 停止 → テキスト入力 / Vision 停止 → 「見えない」と正直に言う)。
 
+「診断」タブ: サービス状態, 応答速度 (発話 → ナビ発話開始の p50/p95, 目標 2 秒), 直近のエラー, リソースモードと VRAM, 自発発言の発言/見送り回数を表示し、「診断情報を書き出す」で JSON に保存できます (文字起こし・画像は含みません)。
+音声サービス / VOICEVOX ENGINE / `ollama serve` はここで有効にしたものだけ NAVI が起動・監視します (落ちたら 1, 2, 5, 10, 30 秒で再起動、続けば停止して報告。既に起動済みならそのまま使います)。
+指標はすべてローカルのみで、`指標をファイルにも記録する` をオンにした時だけ `userData/logs/telemetry.jsonl` (ローテーション) に数値だけを書きます。
+
 ## 構成
 
 ```
@@ -40,6 +44,8 @@ src/core/            Friend Core — ゲーム固有ロジックを置かない
   orchestrator/      FriendOrchestrator — 発言の唯一の決定点 (§6.1)
   conversation/      人格プロンプト, JSON 応答パーサ, 話量の強制 (§8.3), 会話状態/トピック疲労
   initiative/        自発発言スコアリング (§10.1) — 定期発言しない
+  supervisor/        ProcessWatchdog — ユーザーが設定した補助プロセスの起動 / バックオフ再起動 / 停止 (PR-10)
+  telemetry/         ローカル専用の指標 (応答遅延 p50/p95, 自発発言, エラー), JSONL ログ, 診断レポート — 外部送信なし
   screen/            dHash フレーム差分, 20 秒リングバッファ, 「これ/今の」検出, VisionService
   ai/                OllamaClient, ModelRouter, HealthMonitor (再接続 1,2,5,10,30 秒)
   voice/             VOICEVOX クライアント, AudioQuery → 口パク, barge-in 状態機械
@@ -70,7 +76,12 @@ voice-service/       Python: WebRTC VAD + faster-whisper (localhost のみ bind)
 npm test                                                   # TS (vitest)
 cd voice-service && python -m unittest discover -s tests -t .   # Python
 npm run typecheck
+npm run test:e2e         # build → Electron e2e (Playwright, 偽 Ollama/VOICEVOX; ディスプレイが無い Linux では xvfb-run)
+npm run eval:character   # 実 Ollama で 100 ターンのキャラ回帰評価 (受入テスト D)。Ollama 不在ならスキップ (exit 0)
 ```
+
+e2e は 11434 / 50021 番ポートに偽サービスを立てるので、本物の Ollama / VOICEVOX は止めてから実行してください。
+`eval:character` は `--model <name>` / `--turns <n>` / `--verbose` / `--json <file>` を受け付けます。
 
 ## 実装状況 (設計書 §24 / 実装指示順)
 
@@ -85,6 +96,6 @@ npm run typecheck
 | PR-07 | Avatar Runtime | 🟡 AvatarDirector と透過/クリック透過窓まで。PuppetJS (PSD/WebGL) の移植は未着手 — 現在は仮の描画 |
 | PR-08 | Tarkov Plugin | 🟡 IF とツール定義のみ。既存 Tarkov Assistant のドメイン/データ移植は未着手 |
 | PR-09 | Memory (SQLite) | 🟡 インメモリ実装と設定のみ |
-| PR-10 | Hardening | 🟡 再接続/障害隔離のみ。診断画面・受入テスト自動化は未着手 |
+| PR-10 | Hardening | ✅ プロセス監視, 再接続, リソースモード自動切替 (+VRAM 表示), 診断タブ, ローカル専用テレメトリ, 受入テスト (B 沈黙 / C 割り込み / D キャラ評価 / G 障害 e2e) |
 
 既存の Tarkov Assistant / PuppetJS のコードはこのリポジトリに含まれていないため、PR-07 / PR-08 はそれらを取り込んだ後に進めます。
