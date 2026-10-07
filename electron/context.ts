@@ -8,7 +8,8 @@ import { createMemoryStore } from './features/memory';
 import { PluginHost } from '../src/core/plugins/PluginHost';
 import { FriendOrchestrator } from '../src/core/orchestrator/FriendOrchestrator';
 import { VisionService } from '../src/core/screen/VisionService';
-import { VoicevoxClient, type TtsAdapter } from '../src/core/voice/VoicevoxClient';
+import { VoicevoxClient } from '../src/core/voice/VoicevoxClient';
+import type { TtsAdapter } from '../src/core/voice/TtsAdapter';
 import { TarkovPlugin } from '../src/plugins/tarkov/TarkovPlugin';
 import { FrameBridge, type CaptureState } from './frameBridge';
 import type { SettingsStore } from './settings';
@@ -53,7 +54,7 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
     chat: () => ollama.ping(),
     // Vision runs on the same Ollama instance.
     vision: () => ollama.ping(),
-    tts: () => voice.tts.ping(),
+    tts: () => voice.tts.health(),
     stt: async () => {
       try {
         return (await fetch(`${VOICE_SERVICE_URL}/health`)).ok;
@@ -79,6 +80,14 @@ export function createContext(settings: SettingsStore, windows: WindowManager): 
     reportFailure: (svc) => health.reportFailure(svc),
     quiet: () => settings.current.quiet,
     sharing: () => capture.sourceId !== null && !capture.paused,
+    recentSystemAudio: async () => {
+      const response = await fetch(`${VOICE_SERVICE_URL}/audio/classify/recent?seconds=6`, {
+        signal: AbortSignal.timeout(1_500),
+      });
+      if (!response.ok) return null;
+      const result = (await response.json()) as { event?: { type: string; confidence: number; at: number } | null };
+      return result.event ?? null;
+    },
   });
 
   return { bus, settings, windows, governor, router, ollama, memory, plugins, health, orchestrator, capture, frames, voice };

@@ -65,7 +65,10 @@ export const watchdogFeature: Feature = {
     let lastSpecs = '';
     // onChange fires immediately with the current settings, then on every change.
     unsubscribe = ctx.settings.onChange((next) => {
-      const specs = buildProcessSpecs(normalizeManagedProcesses(next.managedProcesses), { defaultVoiceServiceCwd });
+      const specs = buildProcessSpecs(normalizeManagedProcesses(next.managedProcesses), {
+        defaultVoiceServiceCwd,
+        voiceServiceUserData: app.getPath('userData'),
+      });
       const key = JSON.stringify(specs);
       if (key === lastSpecs) return;
       lastSpecs = key;

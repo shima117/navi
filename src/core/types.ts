@@ -49,6 +49,8 @@ export interface UserUtterance {
   id: string;
   text: string;
   source: 'voice' | 'text';
+  /** Mandatory for audio-originated turns; absent only on legacy/tests and text input. */
+  audioSource?: import('./voice/AudioSource').AudioSource;
   at: number;
 }
 

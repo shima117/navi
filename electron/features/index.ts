@@ -9,6 +9,7 @@ import { voiceFeature } from './voice';
 import { resourceFeature } from './resource';
 import { watchdogFeature } from './watchdog';
 import { diagnosticsFeature } from './diagnostics';
+import { audioFeature } from './audio';
 
 /** Main-process features, set up in this order. */
 export const FEATURES: Feature[] = [
@@ -16,11 +17,13 @@ export const FEATURES: Feature[] = [
   captureFeature,
   friendFeature,
   memoryFeature,
+  // Start configured helper processes before audio attempts to connect to voice-service.
+  watchdogFeature,
+  audioFeature,
   voiceFeature,
   avatarFeature,
   pluginsFeature,
   // PR-10 hardening. resource must come after settings: its settings listener overrides the manual mode.
   resourceFeature,
-  watchdogFeature,
   diagnosticsFeature,
 ];

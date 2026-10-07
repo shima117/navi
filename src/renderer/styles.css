@@ -69,6 +69,13 @@ footer { border-top: 1px solid var(--line); }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 12px 0; max-width: 360px; font-size: 13px; color: var(--muted); }
 .health li.ok { color: var(--ok); }
 .health li.bad { color: var(--accent); }
+.settings { max-width: 940px; }
+.audio-settings { margin: 24px 0; padding: 14px 0 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.audio-settings h3 { margin: 0 0 8px; }
+.audio-status { flex-wrap: wrap; margin: 12px 0; }
+.audio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); max-width: 760px; }
+.audio-actions { flex-wrap: wrap; margin-top: 14px; }
+.audio-warning { color: var(--warn); font-size: 13px; }
 
 .games { display: grid; grid-template-columns: 280px 1fr; height: 100%; }
 .games aside { border-right: 1px solid var(--line); }

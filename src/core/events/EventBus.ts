@@ -10,6 +10,8 @@ import type { FrameSummary } from '../screen/FrameSummary';
 import type { ScreenOcr } from '../screen/OcrAnalysis';
 import type { LipSyncKeyframe } from '../voice/LipSync';
 import type { ResourceMode } from '../resource/ResourceGovernor';
+import type { AudioSource } from '../voice/AudioSource';
+import type { FloorState } from '../voice/FloorManager';
 
 /** Every event in the system (design doc §16). Modules talk only through these. */
 export interface NaviEvents {
@@ -19,9 +21,15 @@ export interface NaviEvents {
   /** Short OCR summary of a high-change frame (RAM only; never log or persist the text, §20). */
   'screen.ocr': ScreenOcr;
 
-  'voice.speech_started': { at: number };
+  'voice.speech_started': { at: number; source?: AudioSource };
+  'voice.speech_ended': { at: number; source?: AudioSource };
+  'voice.partial': { at: number; source: AudioSource; text: string; durationMs: number; energy: number };
+  'voice.floor_changed': { at: number; state: FloorState };
   'voice.transcript': UserUtterance;
   'voice.interrupted': { at: number };
+  'audio.system_event': { at: number; kind: string; confidence: number };
+  'audio.system_transcript': { at: number; text: string };
+  'audio.remote_transcript': { at: number; text: string };
 
   'plugin.event': PluginEvent;
   'plugin.context': PluginContext;

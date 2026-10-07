@@ -39,6 +39,17 @@ class Segmenter:
     _voiced_total: int = 0
     _in_speech: bool = False
 
+    @property
+    def in_speech(self) -> bool:
+        return self._in_speech
+
+    @property
+    def speech_duration_ms(self) -> int:
+        return len(self._speech) * FRAME_MS if self._in_speech else 0
+
+    def current_audio(self) -> bytes:
+        return b"".join(self._speech) if self._in_speech else b""
+
     def push(self, frame: bytes, is_voiced: bool) -> List[SegmentEvent]:
         events: List[SegmentEvent] = []
         cfg = self.config

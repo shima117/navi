@@ -3,3 +3,4 @@ uvicorn[standard]>=0.32
 faster-whisper>=1.1
 webrtcvad-wheels>=2.0.14
 numpy>=1.26
+sounddevice>=0.5.1; platform_system == "Windows"

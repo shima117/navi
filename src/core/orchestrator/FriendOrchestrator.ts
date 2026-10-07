@@ -38,6 +38,8 @@ export interface OrchestratorDeps {
   quiet?: () => boolean;
   /** Is a screen share running? */
   sharing?: () => boolean;
+  /** A conservative classifier over recent SYSTEM PCM, queried only on demand. */
+  recentSystemAudio?: () => Promise<{ type: string; confidence: number; at: number } | null>;
 }
 
 interface TurnInput {
@@ -51,6 +53,7 @@ interface TurnInput {
   toolResult?: { name: string; result: unknown };
   /** The observation is only OCR'd text: nothing beyond it may be claimed. */
   observationVia?: 'ocr';
+  audioEvent?: { type: string; confidence: number; at: number } | null;
 }
 
 const FOCUS_HOLD_MS = 20_000;
@@ -60,6 +63,8 @@ const OCR_FRESH_MS = 20_000;
 /** The same price tag is not brought up again within this window. */
 const PRICE_REPEAT_MS = 10 * 60_000;
 const PRICE_TOPIC = 'ocr-price:';
+const REMOTE_CONTEXT_FRESH_MS = 20_000;
+const SYSTEM_CONTEXT_FRESH_MS = 10_000;
 
 /**
  * The single decision point for everything Navi says (design doc §6.1).
@@ -79,6 +84,9 @@ export class FriendOrchestrator {
   private latestOcr: ScreenOcr | null = null;
   private pendingPriceOcr: ScreenOcr | null = null;
   private surfacedPrices = new Map<string, number>();
+  private recentRemote: { text: string; at: number } | null = null;
+  private recentSystem: { text: string; at: number } | null = null;
+  private latestSystemEvent: { type: string; confidence: number; at: number } | null = null;
   private readonly recentRegions = new RecentRegionChanges();
 
   constructor(private readonly deps: OrchestratorDeps) {
@@ -91,7 +99,20 @@ export class FriendOrchestrator {
     bus.on('voice.speech_started', () => {
       this.userSpeaking = true;
     });
+    bus.on('voice.speech_ended', () => {
+      this.userSpeaking = false;
+    });
     bus.on('voice.interrupted', () => this.conversation.markInterrupted());
+    // REMOTE is context only. It never creates a user turn or triggers a reply by itself.
+    bus.on('audio.remote_transcript', (remote) => {
+      this.recentRemote = remote;
+    });
+    bus.on('audio.system_transcript', (system) => {
+      this.recentSystem = system;
+    });
+    bus.on('audio.system_event', (event) => {
+      this.latestSystemEvent = { type: event.kind, confidence: event.confidence, at: event.at };
+    });
     bus.on('plugin.event', (e) => this.onPluginEvent(e));
     bus.on('screen.changed', (f) => {
       this.screenActivity = Math.max(this.screenActivity * 0.7, f.change);
@@ -115,6 +136,10 @@ export class FriendOrchestrator {
     this.conversation.addUserTurn(u.text, u.at);
 
     const ref = detectScreenReference(u.text);
+    const soundQuestion = /(?:今|さっき|直前).{0,8}(?:音|物音)|(?:音|物音).{0,8}(?:何|なに)/.test(u.text);
+    const recentAudio = soundQuestion
+      ? this.deps.recentSystemAudio?.().catch(() => null) ?? Promise.resolve(null)
+      : Promise.resolve(null);
     let observation: ScreenObservation | null = null;
     let screenUnavailable = false;
     if (ref !== 'none') {
@@ -122,11 +147,14 @@ export class FriendOrchestrator {
       screenUnavailable = observation === null;
     }
     if (seq !== this.turnSeq) return { ...SILENT_RESPONSE };
+    const audioEvent = soundQuestion
+      ? (await recentAudio) ?? (this.latestSystemEvent && this.now() - this.latestSystemEvent.at < 6_000 ? this.latestSystemEvent : null)
+      : undefined;
 
     const pluginContext = observation ? await this.deps.plugins.enrich(observation) : null;
     return this.runTurn(
       seq,
-      { kind: 'reply', userText: u.text, observation, screenUnavailable, pluginContext },
+      { kind: 'reply', userText: u.text, observation, screenUnavailable, pluginContext, audioEvent },
       abort.signal,
     );
   }
@@ -475,6 +503,17 @@ export class FriendOrchestrator {
       context.push('画面共有はされていない。');
     }
     if (input.pluginContext?.facts.length) context.push(`補足情報: ${input.pluginContext.facts.join(' / ')}`);
+    if (this.recentRemote && this.now() - this.recentRemote.at <= REMOTE_CONTEXT_FRESH_MS) {
+      context.push(`通話相手(REMOTE、ユーザー本人とは別の話者): ${this.recentRemote.text}`);
+    }
+    if (this.recentSystem && this.now() - this.recentSystem.at <= SYSTEM_CONTEXT_FRESH_MS) {
+      context.push(`PC/ゲーム音声(SYSTEM、ユーザー発話ではない): ${this.recentSystem.text}`);
+    }
+    if (input.audioEvent !== undefined) {
+      context.push(input.audioEvent
+        ? `直前のSYSTEM音: 突発音の候補（確信度 ${input.audioEvent.confidence.toFixed(2)}）。音の正体は未判定。画面情報と照合し、断定しない。`
+        : '直前のSYSTEM音を判別できなかった。聞こえたふりをしない。');
+    }
     if (input.toolResult) {
       context.push(`ツール ${input.toolResult.name} の結果: ${JSON.stringify(input.toolResult.result).slice(0, 1500)}`);
     }
