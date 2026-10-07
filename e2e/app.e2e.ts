@@ -50,7 +50,7 @@ async function launch(): Promise<Running> {
     executablePath: ELECTRON_BIN,
     args: ['.', '--no-sandbox', '--disable-gpu'],
     cwd: ROOT,
-    env: { ...process.env, NAVI_USER_DATA: userData },
+    env: { ...process.env, NAVI_USER_DATA: userData, OPENAI_API_KEY: '' },
     timeout: 30_000,
   });
   cleanups.push(async () => {

@@ -209,7 +209,7 @@ export class FriendOrchestrator {
     const report = snapshot.lastReport;
     if (!report) return true;
     const success = isVerifiedSuccess(report, snapshot.id);
-    const text = success ? `${snapshot.title}、終わりました。確認も通っています。`
+    const text = success ? (report.action === 'OPENAI_TEXT' ? 'OpenAIから回答が届いています。内容の正しさまでは確認できていません。' : `${snapshot.title}、終わりました。確認も通っています。`)
       : `${snapshot.title}は、ここで一旦止めています。${report.reason ?? snapshot.blocker ?? '最終確認がまだです。'}${report.nextAction ?? ''}`;
     this.commit({ ...SILENT_RESPONSE, speak: true, text, intensity: .3, gaze: 'user',
       emotion: success ? 'relieved' : 'worried', gesture: 'small_nod' }, 'voice');
@@ -577,7 +577,7 @@ export class FriendOrchestrator {
     }
     if (extraInstruction) context.push(extraInstruction);
     if (input.presentation === 'text') context.push('今回は声ではなくデスクトップの文字で返答する。必要な説明は省かなくてよいが、不要に長くしない。');
-    if (this.deps.taskCommand) context.push('実行できる裏作業はNAVIの環境確認と、選んだプロジェクトの読み取り確認だけ。コード変更、ソフトの起動・導入、API使用、PC操作はまだ実行できない。実行したふりや成功したふりをしない。');
+    if (this.deps.taskCommand) context.push('会話から実行できる裏作業はNAVIの環境確認と、選んだプロジェクトの読み取り確認だけ。OpenAI APIへの文章相談は作業タブで送る文章とモデル・料金を毎回ユーザーが確認する必要がある。会話、記憶、画面、ファイルを勝手に外部へ送らない。コード変更、ソフトの起動・導入、PC操作はまだ実行できない。実行したふりや成功したふりをしない。');
     messages.push({ role: 'system', content: context.join('\n') });
 
     for (const t of this.conversation.recentTurns(12)) {

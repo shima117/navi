@@ -51,6 +51,15 @@ function setup(opts: {
 }
 
 describe('FriendOrchestrator', () => {
+  it('announces API receipt without treating generated text as verified facts', () => {
+    const { orch, spoken } = setup({ chat: new FakeOllama([]) });
+    expect(orch.reportTask({ id: 'cloud-task', title: 'OpenAIへの文章相談', status: 'DONE', phase: 'complete',
+      currentAction: '回答受信', progress: 1, eta: null, lastUpdateAt: 1000,
+      lastReport: { taskId: 'cloud-task', action: 'OPENAI_TEXT', state: 'SUCCESS', summary: '試験用回答', verified: true, timestamp: 1000,
+        verification: { method: 'HTTP', result: 'PASS', evidence: 'response received, not factual verification' } } })).toBe(true);
+    expect(spoken[0]).toContain('内容の正しさまでは確認できていません');
+    expect(spoken[0]).not.toContain('確認も通っています');
+  });
   it('plain chat does not call vision', async () => {
     const chat = new FakeOllama([reply('お疲れさまです。まあ私も今日は何もしたくないですけど')]);
     const vision = new FakeOllama([]);

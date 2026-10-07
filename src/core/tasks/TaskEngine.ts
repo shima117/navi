@@ -54,6 +54,7 @@ export class TaskEngine {
       if (TASK_TERMINAL.has(r.snapshot.status)) continue;
       if (command === 'CANCEL') {
         this.policy.cancel(r.request);
+        if (r.request.cloud) delete r.request.cloud.inputText;
         r.snapshot.lastReport = undefined;
         this.change(r, 'CANCELLED', '中止しました。', 'cancelled');
         r.endedAt = this.now();
@@ -61,6 +62,7 @@ export class TaskEngine {
         this.active.get(r.request.id)?.abort(new Error('USER_CANCEL'));
       } else if (command === 'PAUSE') {
         if (r.snapshot.status === 'PAUSED') continue;
+        if (r.request.cloud) delete r.request.cloud.inputText;
         this.budgets.get(r.request.id)?.pause(this.now());
         this.change(r, 'PAUSED', '一時停止しました。', 'paused');
         this.persist(r);
@@ -95,12 +97,13 @@ export class TaskEngine {
       if (this.active.size >= this.maxConcurrent) return;
       if (r.snapshot.status !== 'PLANNING' || this.active.has(r.request.id)) continue;
       const root = process.platform === 'win32' ? r.request.projectRoot?.toLowerCase() : r.request.projectRoot;
-      const key = r.request.kind === 'LOCAL_HEALTH' ? 'system:local-health' : `project:${root}`;
+      const key = r.request.kind === 'LOCAL_HEALTH' ? 'system:local-health' : r.request.kind === 'OPENAI_TEXT' ? 'cloud:openai' : `project:${root}`;
       const release = this.locks.acquire(r.request.id, [key]);
       if (!release) continue;
       const controller = new AbortController();
       this.active.set(r.request.id, controller);
       const running = this.run(r, controller).finally(() => {
+        if (r.request.cloud) delete r.request.cloud.inputText;
         release();
         this.active.delete(r.request.id);
         this.activeRuns.delete(r.request.id);
@@ -160,6 +163,7 @@ export class TaskEngine {
         return;
       } catch (err) {
         if (controller.signal.aborted) return this.finishAbort(r, controller);
+        if (r.request.kind === 'OPENAI_TEXT') { this.wait(r, 'OpenAIとの通信を確認できませんでした。課金済みの可能性があるため自動再送しません。'); return; }
         const reason = err instanceof Error ? err.message.slice(0, 300) : '確認処理でエラーが発生しました。';
         budget.failed(reason);
         r.lastFailure = { signature: reason, consecutive: r.lastFailure?.signature === reason ? r.lastFailure.consecutive + 1 : 1 };

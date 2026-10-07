@@ -14,7 +14,7 @@ let profile: string;
 
 async function launch() {
   app = await electron.launch({ executablePath: BIN, args: ['.', '--no-sandbox'], cwd: ROOT,
-    env: { ...process.env, NAVI_USER_DATA: profile }, timeout: 30000 });
+    env: { ...process.env, NAVI_USER_DATA: profile, OPENAI_API_KEY: '' }, timeout: 30000 });
   await expect.poll(() => app.windows().some((w) => w.url().endsWith('/index.html'))).toBe(true);
   main = app.windows().find((w) => w.url().endsWith('/index.html'))!;
   await expect(main.locator('header .brand')).toHaveText('NAVI');
@@ -155,4 +155,26 @@ test('an Agent process crash does not stop the main window or avatar, and is not
   }
   await main.evaluate(() => window.navi.friend.submitText('今どう？'));
   await expect(main.locator('.line.navi .text').last()).toContainText('作業はありません');
+});
+
+test('OpenAI task UI refuses missing keys and secrets without network or task creation', async () => {
+  await main.getByRole('button', { name: '作業', exact: true }).click();
+  await expect(main.getByTestId('openai-task')).toBeVisible();
+  await expect(main.getByTestId('openai-state')).toContainText('APIキー未設定');
+  await main.getByLabel('OpenAIに送信する文章').fill('これは公開の試験用文章です。');
+  await main.getByRole('button', { name: '送信内容と料金を確認', exact: true }).click();
+  await expect(main.getByRole('alert')).toContainText('OPENAI_API_KEYが未設定');
+  await main.screenshot({ path: test.info().outputPath('openai-task.png'), fullPage: true });
+  expect(await main.evaluate(() => window.navi.tasks.list())).toEqual([]);
+  const state = await main.evaluate(() => window.navi.tasks.cloudState());
+  expect(state.keyConfigured).toBe(false);
+  expect(state.dayChargedMicros).toBe(0);
+  await main.getByLabel('OpenAIに送信する文章').fill('api_key=fixture-not-real');
+  await main.getByRole('button', { name: '送信内容と料金を確認', exact: true }).click();
+  await expect(main.getByRole('alert')).toContainText('秘密情報');
+  expect(await main.evaluate(() => window.navi.tasks.list())).toEqual([]);
+  const avatar = app.windows().find((w) => w.url().endsWith('/avatar.html'))!;
+  expect(await avatar.evaluate(() => window.navi.tasks.openAiText({ text: 'public fixture', tier: 'ECONOMY', dataClass: 'PUBLIC', maxCostMicros: 250000 }).then(() => 'unexpected', () => 'denied'))).toBe('denied');
+  const overlay = app.windows().find((w) => w.url().endsWith('/text-overlay.html'))!;
+  expect(await overlay.evaluate(() => 'tasks' in window.navi)).toBe(false);
 });

@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { localHelperEnvironment } from '../../src/core/supervisor/environment';
 import {
   ProcessWatchdog,
   type ChildProcessLike,
@@ -103,7 +104,7 @@ async function probeLocal(url: string): Promise<boolean> {
 function spawnChild(spec: ProcessSpec): ChildProcessLike {
   const child = spawn(spec.command, spec.args, {
     cwd: spec.cwd || undefined,
-    env: { ...process.env, ...spec.env },
+    env: localHelperEnvironment(process.env, spec.env),
     // stdout is never read (it could carry anything); stderr feeds diagnostics after redaction.
     stdio: ['ignore', 'ignore', 'pipe'],
     windowsHide: true,

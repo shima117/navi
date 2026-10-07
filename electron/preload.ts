@@ -18,6 +18,7 @@ import type { DesktopTextState, OverlayCommand, TextMode } from '../src/core/des
 import type { TaskSnapshot } from '../src/core/tasks/TaskSnapshotPublisher';
 import type { TaskControl } from '../src/core/tasks/TaskProtocol';
 import type { ApprovalRecord } from '../src/core/tasks/ApprovalStore';
+import type { OpenAiTextInput, OpenAiCloudState } from '../src/core/cloud/OpenAiOptions';
 
 // Bundled with esbuild (sandboxed preloads cannot require local modules).
 
@@ -40,6 +41,8 @@ const api = {
     layout: (revision: number, pages: number) => ipcRenderer.send(IPC.textLayout, revision, pages),
   },
   tasks: {
+    openAiText: (input: OpenAiTextInput): Promise<string | null> => ipcRenderer.invoke(IPC.tasksOpenAiText, input),
+    cloudState: (): Promise<OpenAiCloudState> => ipcRenderer.invoke(IPC.tasksCloudState),
     approvals: (): Promise<ApprovalRecord[]> => ipcRenderer.invoke(IPC.tasksApprovals),
     list: (): Promise<TaskSnapshot[]> => ipcRenderer.invoke(IPC.tasksList),
     onSnapshot: (cb: (s: TaskSnapshot) => void) => subscribe(IPC.taskSnapshot, cb),

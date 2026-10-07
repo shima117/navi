@@ -63,6 +63,8 @@ export const IPC = {
   tasksControl: 'tasks:control',
   tasksAgentState: 'tasks:agentState',
   tasksApprovals: 'tasks:approvals',
+  tasksOpenAiText: 'tasks:openAiText',
+  tasksCloudState: 'tasks:cloudState',
 
   pluginList: 'plugin:list',
   pluginActivate: 'plugin:activate',

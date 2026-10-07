@@ -27,8 +27,8 @@ NAVIはユーザーの会話・画面共有・作業に付き添う常駐AIで�
 | Realtime | FriendOrchestrator、会話・音声、キャッシュ済みTaskSnapshot参照 | 負荷下の遅延保証、GPU優先制御 |
 | Avatar renderer | 独立透明Window、AvatarDirector、口パク・まばたき・仮描画 | PuppetJS参照移植、PSD/WebGL本番描画 |
 | Text renderer | 独立透明Window、背景なしの文字、ページ・位置・外観設定 | OBS等の除外実効性、複数モニター実機受入 |
-| Agent Utility Process | TaskEngine、SQLite、2つの固定読み取り能力 | Coding/Research/Browser/Media/PC操作 |
-| Control & Safety | ネイティブ権限判定、Task単位承認、停止、失敗予算、ロック、回路遮断 | Cloud予算、Job Object、OS隔離、PrivilegedBroker、独立Supervisor/rollback |
+| Agent Utility Process | TaskEngine、SQLite、2つの固定読み取り能力、承認付きOpenAI文章相談 | Coding/Research/Browser/Media/PC操作 |
+| Control & Safety | ネイティブ権限判定、Task単位承認、OpenAI利用概算管理、停止、失敗予算、ロック、回路遮断 | 汎用Cloud分類、Job Object、OS隔離、PrivilegedBroker、独立Supervisor/rollback |
 | Data | Task DB、承認記録、Memory、ローカル監査 | Tool Registry、Research Cache、Artifact Manifest |
 
 プロセス分離はOS権限サンドボックスではありません。任意の子プロセスはまだ起動しません。
@@ -42,7 +42,14 @@ NAVIはユーザーの会話・画面共有・作業に付き添う常駐AIで�
 ファイル形式の確認のみ。scripts・依存コードは実行せず、再帰スキャン・書き換えをしません。
 内容をモデルやCloudへ送りません。承認は対象・タスク・操作・期限に固定します。
 
-任意Shell、install、Cloud API、self update、任意PC操作は無効です。
+`OPENAI_TEXT`: 作業タブに明示入力した短い文章を、ネイティブ確認を経てOpenAI Responses APIへ1回だけ送る。
+Provider・モデル/Tier・本文ハッシュ・分類・料金上限・Task ID・期限に承認を固定。
+PUBLIC/PRIVATEだけを許可し、機密・秘密・既知のキーらしい文字列を拒否する。
+雑談・記憶・画面・音声・ファイルの自動送信、Web検索・ツール実行は行わない。
+キーは起動環境のOPENAI_API_KEYをmain/Agentだけで使用し、公開IPC・ログ・SQLiteに渡さない。ローカル補助サービスにも継承しない。
+API回答の受信と、回答内容の事実確認は区別する。詳細は [openai-api.md](openai-api.md)。
+
+任意Shell、install、未承認Cloud API、self update、任意PC操作は無効です。
 承認記録が存在するだけで、未実装の能力を有効にしてはいけません。
 
 ## 5. Taskと安全制御
@@ -53,6 +60,8 @@ DB処理はAgent内で行い、Realtimeは軽量なキャッシュだけを読�
 一時停止・再開・中止を実処理へ伝え、中止後の遅い成功通知で状態を戻しません。
 
 既定のFailureBudgetは3試行、同じエラー2回、稼働時間30秒。
+OpenAIは例外として自動再試行なし。送信前に未確定額をSQLiteへ予約し、利用量が確認できたときだけ精算する。
+再開・再起動は送信権限を復活させない。中止はローカル停止であり、API側の処理終了や返金を保証しない。
 ResourceLockで同じ対象の確認を直列化し、CircuitBreakerで連続失敗を遮断します。
 Task登録後の実行時と各試行直前にネイティブPolicyEngineを通します。
 承認不足・期限切れ・撤回は保留とし、モデルが許可を決めることはありません。
@@ -84,8 +93,8 @@ Memoryは保存設定と検索・編集・削除を提供します。
 
 ## 8. 未完成と受入条件
 
-次はCloud向けのProvider/Tier/送信データ/料金を固定した事前承認・予算管理、
-OS権限制限とプロセス木制御、安全なCoding/Research Worker、検証・deploy/rollback、
+OpenAIの明示文章相談と概算管理を追加。料金表の更新・実キーでの任意の接続確認は残っている。
+次はOS権限制限とプロセス木制御、安全なCoding/Research Worker、検証・deploy/rollback、
 GPU leaseとRealtime優先制御、Avatarの参照移植です。
 承認と隔離なしに外部送信・インストール・特権操作へ広げません。
 
