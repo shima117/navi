@@ -10,15 +10,24 @@ import { TASK_TERMINAL, type TaskControl } from '../../src/core/tasks/TaskProtoc
 let notices = new Map<string, TaskSnapshot>();
 let noticeTimer: ReturnType<typeof setInterval> | null = null;
 let selectingProject = false;
+let consentEpoch = 0;
 
 async function inspectProject(ctx: AppContext): Promise<string | null> {
   if (selectingProject || !ctx.windows.main) return null;
   selectingProject = true;
+  const epoch = consentEpoch;
   try {
     const choice = await dialog.showOpenDialog(ctx.windows.main, { title: '読み取り確認するプロジェクトを選ぶ', properties: ['openDirectory'] });
-    if (choice.canceled || !choice.filePaths[0]) return null;
+    if (choice.canceled || !choice.filePaths[0] || epoch !== consentEpoch) return null;
     const root = await realpath(choice.filePaths[0]);
-    return ctx.agent.enqueue('PROJECT_INSPECT', root);
+    if (epoch !== consentEpoch || !ctx.windows.main) return null;
+    const confirmation = await dialog.showMessageBox(ctx.windows.main, {
+      type: 'question', title: 'プロジェクトの読み取り確認', message: 'このプロジェクトだけを読み取り確認しますか？',
+      detail: `対象: ${root}\n読むもの: package.json（最大1MB）の形式だけ\n行わないこと: ファイル変更、scripts実行、再帰スキャン、モデル・Cloudへの内容送信\n料金: 外部APIを使用しません\n承認範囲: この1作業、15分間、再起動で失効\n承認しない場合: 読み取りせずに戻ります`,
+      buttons: ['やめる', 'この作業だけ許可'], defaultId: 0, cancelId: 0, noLink: true,
+    });
+    if (confirmation.response !== 1 || epoch !== consentEpoch) return null;
+    return ctx.agent.enqueueProject(root);
   } finally { selectingProject = false; }
 }
 
@@ -31,19 +40,23 @@ function formatResult(snapshot?: TaskSnapshot): string {
 export const agentFeature: Feature = {
   name: 'agent',
   setup(ctx) {
-    const mainOnly = (id: number) => { if (id !== ctx.windows.main?.webContents.id) throw new Error('Task access denied'); };
+    const mainOnly = (event: Electron.IpcMainInvokeEvent) => {
+      if (event.sender.id !== ctx.windows.main?.webContents.id || event.senderFrame !== event.sender.mainFrame) throw new Error('Task access denied');
+    };
     ipcMain.handle(IPC.tasksStartHealth, (event, key?: unknown) => {
-      mainOnly(event.sender.id);
+      mainOnly(event);
       if (key !== undefined && (typeof key !== 'string' || !/^[a-z0-9-]{1,80}$/i.test(key))) throw new Error('Invalid idempotency key');
       return ctx.agent.enqueue('LOCAL_HEALTH', undefined, key as string | undefined);
     });
-    ipcMain.handle(IPC.tasksInspectProject, (event) => { mainOnly(event.sender.id); return inspectProject(ctx); });
+    ipcMain.handle(IPC.tasksInspectProject, (event) => { mainOnly(event); return inspectProject(ctx); });
+    ipcMain.handle(IPC.tasksApprovals, (event) => { mainOnly(event); return ctx.agent.listApprovals(); });
     ipcMain.handle(IPC.tasksControl, (event, command: TaskControl, id?: unknown) => {
-      mainOnly(event.sender.id);
+      mainOnly(event);
       if (!['PAUSE', 'RESUME', 'CANCEL', 'PRIORITIZE', 'DEPRIORITIZE'].includes(command) || (id !== undefined && (typeof id !== 'string' || !ctx.tasks.read(id)))) throw new Error('Invalid task control');
+      if (command === 'CANCEL') consentEpoch++;
       ctx.agent.control(command, id as string | undefined);
     });
-    ipcMain.handle(IPC.tasksAgentState, (event) => { mainOnly(event.sender.id); return ctx.agent.status(); });
+    ipcMain.handle(IPC.tasksAgentState, (event) => { mainOnly(event); return ctx.agent.status(); });
     ctx.taskCommand = (text, turnId) => {
       const intent = detectTaskIntent(text);
       if (intent.type === 'none') return null;
@@ -62,6 +75,7 @@ export const agentFeature: Feature = {
           const selected = tasks.filter((t) => intent.target ? t.title.includes(intent.target === 'project' ? 'プロジェクト' : '環境') : !TASK_TERMINAL.has(t.status));
           return formatTaskSnapshots(selected.length ? selected : tasks.slice(-1));
         }
+        if (intent.command === 'CANCEL') consentEpoch++;
         const eligible = tasks.filter((t) => !TASK_TERMINAL.has(t.status) && (intent.command !== 'RESUME' || t.status === 'PAUSED' || t.status === 'WAITING'));
         if (!eligible.length) return '今は操作できる裏作業はありません。';
         if (!intent.all && eligible.length > 1) return '作業が複数あります。作業タブで対象を選んでください。';
@@ -77,7 +91,8 @@ export const agentFeature: Feature = {
     ctx.bus.on('voice.partial', ({ text, source }) => {
       if (source !== 'USER_MIC') return;
       const intent = detectTaskIntent(text);
-      if (intent.type === 'control' && intent.command === 'CANCEL' && ctx.tasks.list().some((t) => !TASK_TERMINAL.has(t.status))) {
+      if (intent.type === 'control' && intent.command === 'CANCEL' && (selectingProject || ctx.tasks.list().some((t) => !TASK_TERMINAL.has(t.status)))) {
+        consentEpoch++;
         try { ctx.agent.control('CANCEL'); notices.clear(); } catch { /* Worker already stopped. */ }
       }
     });
@@ -91,6 +106,7 @@ export const agentFeature: Feature = {
     }, 2000);
   },
   async stop(ctx) {
+    consentEpoch++;
     if (noticeTimer) clearInterval(noticeTimer);
     notices.clear();
     ctx.taskCommand = undefined;

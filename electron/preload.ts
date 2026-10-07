@@ -17,6 +17,7 @@ import type { MemoryItem, MemoryStats, MemoryTier } from '../src/core/memory/Mem
 import type { DesktopTextState, OverlayCommand, TextMode } from '../src/core/desktopText/DesktopText';
 import type { TaskSnapshot } from '../src/core/tasks/TaskSnapshotPublisher';
 import type { TaskControl } from '../src/core/tasks/TaskProtocol';
+import type { ApprovalRecord } from '../src/core/tasks/ApprovalStore';
 
 // Bundled with esbuild (sandboxed preloads cannot require local modules).
 
@@ -39,6 +40,7 @@ const api = {
     layout: (revision: number, pages: number) => ipcRenderer.send(IPC.textLayout, revision, pages),
   },
   tasks: {
+    approvals: (): Promise<ApprovalRecord[]> => ipcRenderer.invoke(IPC.tasksApprovals),
     list: (): Promise<TaskSnapshot[]> => ipcRenderer.invoke(IPC.tasksList),
     onSnapshot: (cb: (s: TaskSnapshot) => void) => subscribe(IPC.taskSnapshot, cb),
     startHealth: (idempotencyKey?: string): Promise<string> => ipcRenderer.invoke(IPC.tasksStartHealth, idempotencyKey),

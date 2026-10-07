@@ -7,7 +7,7 @@ import { CircuitBreaker, FailureBudget, ResourceLock, checkTaskPolicy } from '..
 import { initialTask, type TaskRequest } from '../src/core/tasks/TaskProtocol';
 import { detectTaskIntent } from '../src/core/tasks/TaskIntent';
 import { runLocalTask } from '../src/core/tasks/LocalTaskRunner';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir, symlink, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -181,5 +181,21 @@ describe('read-only workers and task intents', () => {
     expect(detectTaskIntent('それ一旦止めて')).toEqual({ type: 'control', command: 'PAUSE', all: false });
     expect(detectTaskIntent('やめて')).toEqual({ type: 'control', command: 'CANCEL', all: true });
     expect(detectTaskIntent('このファイルを消して').type).toBe('none');
+  });
+  it('rejects oversized files and a root that resolves outside the authorized canonical path', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'navi-task-scope-'));
+    try {
+      const selected = path.join(dir, 'selected');
+      const alias = path.join(dir, 'alias');
+      await mkdir(selected);
+      const canonical = await realpath(selected);
+      await writeFile(path.join(selected, 'package.json'), Buffer.alloc(1024 * 1024 + 1, 32));
+      await expect(runLocalTask(request('large', { kind: 'PROJECT_INSPECT', projectRoot: canonical }), new AbortController().signal, vi.fn()))
+        .rejects.toThrow('大きすぎる');
+      await writeFile(path.join(selected, 'package.json'), '{}');
+      await symlink(selected, alias, process.platform === 'win32' ? 'junction' : 'dir');
+      await expect(runLocalTask(request('redirected', { kind: 'PROJECT_INSPECT', projectRoot: alias }), new AbortController().signal, vi.fn()))
+        .rejects.toThrow('場所が変わりました');
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
 });

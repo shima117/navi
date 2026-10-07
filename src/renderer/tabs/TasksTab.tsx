@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { formatTaskSnapshots, type TaskSnapshot } from '../../core/tasks/TaskSnapshotPublisher';
 import { TASK_TERMINAL, type TaskControl } from '../../core/tasks/TaskProtocol';
+import type { ApprovalRecord } from '../../core/tasks/ApprovalStore';
 
 export function TasksTab() {
   const [tasks, setTasks] = useState<TaskSnapshot[]>([]);
   const [error, setError] = useState('');
+  const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [state, setState] = useState<{ ready: boolean; pid: number | null; error: string | null } | null>(null);
   useEffect(() => {
     let active = true;
@@ -16,7 +18,10 @@ export function TasksTab() {
       for (const s of prev) if (!merged.has(s.id) || merged.get(s.id)!.lastUpdateAt <= s.lastUpdateAt) merged.set(s.id, s);
       return [...merged.values()];
     }); });
-    const refresh = () => void window.navi.tasks.agentState().then((s) => { if (active) setState(s); });
+    const refresh = () => {
+      void window.navi.tasks.agentState().then((s) => { if (active) setState(s); });
+      void window.navi.tasks.approvals().then((records) => { if (active) setApprovals(records); });
+    };
     refresh();
     const timer = setInterval(refresh, 2000);
     return () => { active = false; off(); clearInterval(timer); };
@@ -37,6 +42,10 @@ export function TasksTab() {
       <button onClick={() => void run(() => window.navi.desktopText.show(formatTaskSnapshots(tasks), 'TASK_STATUS'))}>進捗を文字で表示</button>
     </div>
     {error && <p role="alert">{error}</p>}
+    <p className="hint">プロジェクト確認は、対象を選んだ後の確認画面で許可した1作業だけです。中止すると承認も撤回します。再起動後は改めて選び直してください。</p>
+    {!!approvals.length && <details data-testid="approval-history"><summary>読み取り承認の記録</summary>
+      {approvals.slice(0, 10).map((a) => <p key={a.id}>{a.projectRoot} — {a.state === 'REVOKED' ? '撤回・失効' : a.expiresAt <= Date.now() ? '期限切れ' : a.state === 'CONSUMED' ? 'この作業に使用済み' : '許可済み'}（内容の外部送信なし）</p>)}
+    </details>}
     {!tasks.length && <p>今は裏作業はありません。</p>}
     {[...tasks].sort((a, b) => b.lastUpdateAt - a.lastUpdateAt).map((t) => <section key={t.id} data-task-id={t.id}>
       <h3>{t.title}</h3>

@@ -72,9 +72,40 @@ Cloud / install / 自己更新 / Protected Core の専用承認・更新経路�
 大量 worker ログ中の Avatar 60 fps / 実マイク割り込み。音声版の 30 分実機運用試験も未実施。
 既存の固定ポート fake-service E2E は、起動中の Ollama を止めないため今回再実行していない。
 
+## 第3区切り: 現行設計とネイティブ承認境界
+
+PR #3 の agent-foundation を基準に後継ブランチで継続。旧Overlayブランチは上書き元として使わない。
+旧 `docs/design.md` の本文を `docs/archive/design-v1-tarkov.md` に原文保存し、現行設計だけへ書き換えた。
+旧専用ゲーム計画は廃止のまま。GamePlugin / PluginHost は汎用拡張境界として維持する。
+
+- PolicyEngine は実処理の各試行直前に働く。既定拒否、固定LOCAL_HEALTH以外は対象限定の承認を必須とする。
+- PROJECT_INSPECT はフォルダ選択後にネイティブ確認画面を表示する。読む対象、行わない操作、外部送信なし、料金なし、15分・1作業の期限と範囲を明示。既定ボタンは「やめる」。
+- 承認は対象の正規化済み絶対パス・Task ID・操作・PRIVATE/LOCAL_ONLYへ固定しfingerprintを照合。別Task・別フォルダ・別操作へ使い回さない。
+- ApprovalStore を同じSQLite接続で実装。承認と消費・撤回の監査を永続化。再試行は同じ範囲と期限内だけ、期限切れを再開で更新しない。
+- 中止で承認を撤回。再起動時は記録を残したまま全既存承認の権限を撤回し、プロジェクトは選び直し・確認し直す。
+- 確認画面を開いている間もキャッシュ済み進捗に応答できる。確認待ち中に全中止した場合、遅れて許可ボタンが返ってきても作業を新規開始しない。
+- Rendererには承認付与APIを公開しない。main windowのmain frameのみTaskの依頼・承認記録参照・制御を許可。Avatarや文字窓からは拒否する。
+- 作業タブに読み取り承認記録を追加。通常の会話やLLMの「承認済み」という文字は許可にならない。
+
+### 第3区切りの検証・性能・権限レビュー
+
+型チェックとビルド成功。通常テスト375件、実ElectronのAgent6件＋文字窓5件がすべて成功。
+ネイティブ確認UIへの回答は試験で注入し、実Worker・SQLite・IPC境界・確認設定を検証する。
+確認拒否でTask/承認が作られない、中止待ち競合、別Windowからの承認参照拒否、再起動での撤回を含む。
+手動のマイク・ゲーム・実ダイアログ操作の長時間受入は未実施。
+読み取り中にファイルが増えても1MB+1byteで読み出しを打ち切り、1MB超なら拒否する。選択後にフォルダが別実パスへ変わった場合も拒否する。
+
+Windows上のコンパイル済み実装による10,000回の権限判定計測:
+固定healthは計1.58ms、承認済みprojectはインメモリSQLite含め計125.11ms。
+これはDBを含む許可確認コストの限定計測で、ディスク遅延や高負荷下Realtime性能の保証ではない。
+
+この区切りで入れた承認はローカルの読み取り専用。CloudのProvider/Tier/送信データ/料金を固定する承認、
+日/月/Task予算と汎用データ分類、install/特権操作承認、Protected Coreの専用更新経路はまだ未実装。
+承認ストアはOS侵害やDBの悪意ある直接書き換えに対する防御ではない。外部送信・任意Shell等は無効のまま。
+
 ## 次に実装する順序
 
-1. PolicyEngine / ApprovalStore / cloud budget / data classification を境界で強制する。API 使用や install / privileged 操作は未承認のまま実行しない。
+1. 現在の読み取り承認を基礎に、Cloud専用のProvider/Tier/送信データ/料金スコープ・予算・データ分類を境界で強制する。API 使用や install / privileged 操作は未承認のまま実行しない。
 2. Windows Job Object 等のプロセス木制御、独立 verifier、安全な CodingWorker、ブラウザ隔離、差分 deploy / rollback。
 3. GPU lease / speech preemption / trace 指標 / 独立 supervisor と、負荷下の実機性能確認。
 4. Avatar の参照移植。現在は仮描画。Tarkov は対象外。

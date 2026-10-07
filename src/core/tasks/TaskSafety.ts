@@ -1,3 +1,5 @@
+import { checkCapability } from './PolicyEngine';
+
 /** Non-LLM safety controls; used before every worker attempt. */
 export class FailureBudget {
   attempts = 0;
@@ -56,5 +58,5 @@ export class ResourceLock {
 
 /** No general shell, install, cloud, self-update or input automation entry point. */
 export function checkTaskPolicy(kind: unknown): void {
-  if (kind !== 'LOCAL_HEALTH' && kind !== 'PROJECT_INSPECT') throw new Error('この操作は許可されていません。');
+  checkCapability(kind);
 }

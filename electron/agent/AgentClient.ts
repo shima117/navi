@@ -1,6 +1,7 @@
 import { app, utilityProcess, type UtilityProcess } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { PROJECT_CONSENT_TTL, type ApprovalRecord, type ProjectConsent } from '../../src/core/tasks/ApprovalStore';
 import { initialTask, TASK_TERMINAL, type AgentCommand, type AgentEvent, type TaskControl, type TaskKind } from '../../src/core/tasks/TaskProtocol';
 import type { TaskSnapshotPublisher } from '../../src/core/tasks/TaskSnapshotPublisher';
 import type { EventBus } from '../../src/core/events/EventBus';
@@ -14,9 +15,18 @@ export class AgentClient {
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private failure: string | null = null;
   private pid: number | null = null;
+  private approvals: ApprovalRecord[] = [];
   constructor(private readonly tasks: TaskSnapshotPublisher, private readonly bus: EventBus) {}
 
   status() { return { ready: this.ready, pid: this.pid, error: this.failure }; }
+  listApprovals() { return structuredClone(this.approvals); }
+  /** Call only after native folder selection AND native explicit confirmation. */
+  enqueueProject(projectRoot: string): string {
+    const id = randomUUID();
+    const now = Date.now();
+    const consent: ProjectConsent = { id: randomUUID(), taskId: id, projectRoot, grantedAt: now, expiresAt: now + PROJECT_CONSENT_TTL };
+    return this.enqueue('PROJECT_INSPECT', projectRoot, id, undefined, consent);
+  }
   start(): void {
     if (this.child || this.stopped) return;
     try {
@@ -45,15 +55,15 @@ export class AgentClient {
       }, 10000);
     } catch { this.unavailable('裏作業のプロセスを起動できませんでした。'); }
   }
-  enqueue(kind: TaskKind, projectRoot?: string, idempotencyKey: string = randomUUID(), turnId?: string): string {
+  enqueue(kind: TaskKind, projectRoot?: string, idempotencyKey: string = randomUUID(), turnId?: string, consent?: ProjectConsent): string {
     if (this.stopped || this.failure) throw new Error(this.failure ?? '作業サービスは終了しています。');
     const existing = this.tasks.read(idempotencyKey);
     if (existing) return existing.id;
     if (this.pending.length >= 64 || this.tasks.list().filter((t) => !TASK_TERMINAL.has(t.status)).length >= 64) throw new Error('待っている作業が多すぎます。');
-    const request = { id: idempotencyKey, idempotencyKey, kind, projectRoot, traceId: randomUUID(), turnId, createdAt: Date.now() };
+    const request = { id: idempotencyKey, idempotencyKey, kind, projectRoot, approvalId: consent?.id, traceId: randomUUID(), turnId, createdAt: Date.now() };
     const initial = initialTask(request);
     this.tasks.update(initial.snapshot);
-    this.send({ type: 'enqueue', request });
+    this.send({ type: 'enqueue', request, consent });
     return request.id;
   }
   control(command: TaskControl, id?: string): void {
@@ -91,8 +101,11 @@ export class AgentClient {
       if (this.startupTimer) clearTimeout(this.startupTimer);
       this.ready = true;
       this.pid = event.pid;
+      this.approvals = event.approvals;
       for (const snapshot of event.snapshots) this.tasks.update(snapshot, snapshot.lastReport);
       for (const command of this.pending.splice(0)) this.child?.postMessage(command);
+    } else if (event.type === 'approvals') {
+      this.approvals = event.records;
     } else if (event.type === 'snapshot') {
       this.tasks.update(event.snapshot, event.report);
       if (['DONE', 'WAITING', 'FAILED'].includes(event.snapshot.status) && event.report) this.bus.emit('task.report', event.snapshot);

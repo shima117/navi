@@ -72,6 +72,10 @@ test('project selection runs only a read-only manifest verifier and records evid
   await writeFile(path.join(project, 'package.json'), '{"name":"fixture","scripts":{"test":"DO NOT EXECUTE"}}');
   await app.evaluate(({ dialog }, directory) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [directory] })) as unknown as typeof dialog.showOpenDialog;
+    dialog.showMessageBox = (async (_window: unknown, options: { detail?: string; defaultId?: number }) => {
+      if (!options.detail?.includes(directory) || !options.detail.includes('Cloud') || options.defaultId !== 0) throw new Error('Consent disclosure missing');
+      return { response: 1, checkboxChecked: false };
+    }) as unknown as typeof dialog.showMessageBox;
   }, project);
   const id = await main.evaluate(() => window.navi.tasks.inspectProject());
   await expect.poll(() => main.evaluate((id) => window.navi.tasks.list().then((tasks) => tasks.find((s) => s.id === id)?.status), id)).toBe('DONE');
@@ -79,6 +83,47 @@ test('project selection runs only a read-only manifest verifier and records evid
   expect(record.lastReport?.verified).toBe(true);
   expect(record.lastReport?.verification?.evidence).toContain('JSON object parsed');
   expect(record.lastReport?.summary).not.toContain('DO NOT EXECUTE');
+  const approvals = await main.evaluate(() => window.navi.tasks.approvals());
+  expect(approvals).toHaveLength(1);
+  expect(approvals[0]?.state).toBe('CONSUMED');
+  expect(approvals[0]?.taskId).toBe(id);
+  await main.getByRole('button', { name: '作業', exact: true }).click();
+  await expect(main.getByTestId('approval-history')).toBeVisible();
+  const avatar = app.windows().find((w) => w.url().endsWith('/avatar.html'))!;
+  expect(await avatar.evaluate(() => window.navi.tasks.approvals().then(() => 'unexpected', () => 'denied'))).toBe('denied');
+  await app.close();
+  await launch();
+  expect((await main.evaluate(() => window.navi.tasks.approvals()))[0]?.state).toBe('REVOKED');
+});
+
+test('native consent denial does not read or create a task', async () => {
+  await app.evaluate(({ dialog }, directory) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [directory] })) as unknown as typeof dialog.showOpenDialog;
+    dialog.showMessageBox = (async () => ({ response: 0, checkboxChecked: false })) as unknown as typeof dialog.showMessageBox;
+  }, profile);
+  expect(await main.evaluate(() => window.navi.tasks.inspectProject())).toBeNull();
+  expect(await main.evaluate(() => window.navi.tasks.list())).toEqual([]);
+  expect(await main.evaluate(() => window.navi.tasks.approvals())).toEqual([]);
+});
+
+test('global cancel invalidates an open consent prompt while cached status remains available', async () => {
+  await app.evaluate(({ dialog }, directory) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [directory] })) as unknown as typeof dialog.showOpenDialog;
+    dialog.showMessageBox = (() => new Promise((resolve) => {
+      (globalThis as unknown as { finishConsent: () => void }).finishConsent = () => resolve({ response: 1, checkboxChecked: false });
+    })) as unknown as typeof dialog.showMessageBox;
+  }, profile);
+  await main.evaluate(() => {
+    (window as unknown as { pendingConsent: Promise<string | null> }).pendingConsent = window.navi.tasks.inspectProject();
+  });
+  await expect.poll(() => app.evaluate(() => typeof (globalThis as unknown as { finishConsent?: () => void }).finishConsent)).toBe('function');
+  await main.evaluate(() => window.navi.friend.submitText('今どう？'));
+  await expect(main.locator('.line.navi .text').last()).toContainText('作業はありません');
+  await main.evaluate(() => window.navi.tasks.control('CANCEL'));
+  await app.evaluate(() => (globalThis as unknown as { finishConsent: () => void }).finishConsent());
+  expect(await main.evaluate(() => (window as unknown as { pendingConsent: Promise<string | null> }).pendingConsent)).toBeNull();
+  expect(await main.evaluate(() => window.navi.tasks.list())).toEqual([]);
+  expect(await main.evaluate(() => window.navi.tasks.approvals())).toEqual([]);
 });
 
 test('an Agent process crash does not stop the main window or avatar, and is not retried silently', async () => {
