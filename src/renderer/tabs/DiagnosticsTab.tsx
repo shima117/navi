@@ -62,6 +62,10 @@ const SETTINGS_KEY: Record<ManagedProcessId, keyof ManagedProcessesSettings> = {
   ollama: 'ollama',
 };
 
+function logError(e: unknown): void {
+  console.error('[diagnostics]', e);
+}
+
 function fmtMs(ms: number | null): string {
   if (ms === null) return '—';
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(2)} 秒`;
@@ -99,9 +103,13 @@ export function DiagnosticsTab() {
 
   const doExport = async () => {
     setExportMsg('書き出し中…');
-    const res = await window.navi.diagnostics.export();
-    if (res.saved) setExportMsg(`保存しました: ${res.path}`);
-    else setExportMsg(res.error ? `保存できませんでした: ${res.error}` : 'キャンセルしました');
+    try {
+      const res = await window.navi.diagnostics.export();
+      if (res.saved) setExportMsg(`保存しました: ${res.path}`);
+      else setExportMsg(res.error ? `保存できませんでした: ${res.error}` : 'キャンセルしました');
+    } catch (e) {
+      setExportMsg(`保存できませんでした: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   if (!settings) return null;
@@ -311,7 +319,7 @@ function ProcessCard(props: {
         <span className={`pill diag-state-${st?.state ?? 'off'}`}>
           {st ? STATE_LABELS[st.state] : entry.enabled ? '未起動' : '無効'}
         </span>
-        <button disabled={!st} onClick={() => void props.onRestart()}>
+        <button disabled={!st} onClick={() => props.onRestart().catch(logError)}>
           再起動
         </button>
       </div>
@@ -356,7 +364,7 @@ function ProcessCard(props: {
           </>
         )}
         {entry.id === 'ollama' && field('executable', 'Ollama 実行ファイル', 'ollama')}
-        <button disabled={!dirty} onClick={() => void props.onSave(draft)}>
+        <button disabled={!dirty} onClick={() => props.onSave(draft).catch(logError)}>
           保存して適用
         </button>
       </details>
